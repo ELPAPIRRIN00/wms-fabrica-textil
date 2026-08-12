@@ -1,7 +1,7 @@
 /**
  * =========================================================
  * 🧠 H.A.M. POO - WMS Textil (FABRICA 2.0)
- * Lógica Principal de la Aplicación
+ * Lógica Principal de la Aplicación (Múltiples Empaques & Stock)
  * =========================================================
  */
 
@@ -27,6 +27,7 @@
             await this.cargarDatos();
             this.configurarNavegacion();
             this.configurarEventos();
+            this.poblarSelectorTelasExistentes();
             this.verificarSesion();
         },
 
@@ -66,6 +67,7 @@
                     if (resBitacora.ok) {
                         this.bitacora = await resBitacora.json();
                     }
+                    this.poblarSelectorTelasExistentes();
                     return;
                 } catch (err) {
                     console.warn('Error cargando desde Backend, recurriendo a localStorage:', err);
@@ -81,13 +83,14 @@
                 this.inventario = this.getInventarioDemo();
                 this.bitacora = [];
             }
+            this.poblarSelectorTelasExistentes();
         },
 
         getInventarioDemo() {
             return [
-                { id: 'HAM-1001', tela: 'Algodón Peinado', color: 'Blanco Óptico', metros: 120, peso: 25, bodega: 1, fecha: this.obtenerFechaActual(), estado: 'Activo' },
-                { id: 'HAM-1002', tela: 'Algodón Peinado', color: 'Negro Intenso', metros: 80, peso: 18, bodega: 1, fecha: this.obtenerFechaActual(), estado: 'Activo' },
-                { id: 'HAM-1003', tela: 'Poliéster Deportivo', color: 'Azul Marino', metros: 200, peso: 40, bodega: 2, fecha: this.obtenerFechaActual(), estado: 'Activo' }
+                { id: 'HAM-1001', tela: 'Algodón Peinado', presentacion: 'Rollo', composicion: '100% Algodón Peinado', color: 'Blanco Óptico', metros: 120, peso: 25, bodega: 1, fecha: this.obtenerFechaActual(), estado: 'Activo' },
+                { id: 'HAM-1002', tela: 'Algodón Peinado', presentacion: 'Rollo', composicion: '100% Algodón Peinado', color: 'Negro Intenso', metros: 80, peso: 18, bodega: 1, fecha: this.obtenerFechaActual(), estado: 'Activo' },
+                { id: 'HAM-1003', tela: 'Poliéster Deportivo', presentacion: 'Bulto', composicion: '100% Poliéster', color: 'Azul Marino', metros: 200, peso: 40, bodega: 2, fecha: this.obtenerFechaActual(), estado: 'Activo' }
             ];
         },
 
@@ -106,6 +109,34 @@
                     console.warn('Error sincronizando con backend:', e);
                 }
             }
+            this.poblarSelectorTelasExistentes();
+        },
+
+        /* ---------- Autocompletado de Telas Existentes ---------- */
+        poblarSelectorTelasExistentes() {
+            const select = document.getElementById('reg-tela-existente');
+            if (!select) return;
+
+            const valorActual = select.value;
+            select.innerHTML = '<option value="">+ Registrar Nueva Tela...</option>';
+
+            // Obtener tipos de telas únicas del inventario
+            const telasUnicas = {};
+            this.inventario.forEach(item => {
+                if (item.tela && !telasUnicas[item.tela]) {
+                    telasUnicas[item.tela] = item.composicion || '';
+                }
+            });
+
+            for (const [tela, composicion] of Object.entries(telasUnicas)) {
+                const opt = document.createElement('option');
+                opt.value = tela;
+                opt.dataset.composicion = composicion;
+                opt.textContent = `${tela} (${composicion || 'Sin composición'})`;
+                select.appendChild(opt);
+            }
+
+            select.value = valorActual;
         },
 
         /* ---------- Autenticación ---------- */
@@ -230,6 +261,22 @@
             const formRegistro = document.getElementById('form-registro');
             if (formRegistro) formRegistro.addEventListener('submit', (e) => this.registrarNuevoRollo(e));
 
+            // Cambio en el selector de Tela Existente -> Autocompletar nombre y composición
+            const selectTelaExistente = document.getElementById('reg-tela-existente');
+            if (selectTelaExistente) {
+                selectTelaExistente.addEventListener('change', (e) => {
+                    const selectedOpt = e.target.options[e.target.selectedIndex];
+                    const inputNombre = document.getElementById('reg-nombre');
+                    const inputComposicion = document.getElementById('reg-composicion');
+                    if (e.target.value) {
+                        inputNombre.value = e.target.value;
+                        if (selectedOpt.dataset.composicion) {
+                            inputComposicion.value = selectedOpt.dataset.composicion;
+                        }
+                    }
+                });
+            }
+
             const btnExportar = document.getElementById('btn-exportar');
             if (btnExportar) btnExportar.addEventListener('click', () => this.exportarCSV());
 
@@ -290,7 +337,7 @@
             }
         },
 
-        /* ---------- Renderizado ---------- */
+        /* ---------- Renderizado de Inventario Agrupado y Stock ---------- */
         renderTablaBodega() {
             const tbody = document.getElementById('tabla-bodega-activa');
             if (!tbody) return;
@@ -303,6 +350,8 @@
             const filtrados = filtro ? activos.filter(r =>
                 r.id.toLowerCase().includes(filtro) ||
                 r.tela.toLowerCase().includes(filtro) ||
+                (r.presentacion && r.presentacion.toLowerCase().includes(filtro)) ||
+                (r.composicion && r.composicion.toLowerCase().includes(filtro)) ||
                 r.color.toLowerCase().includes(filtro)
             ) : activos;
 
@@ -312,29 +361,45 @@
                 grupos[r.tela].push(r);
             });
 
-            for (const [tela, rollos] of Object.entries(grupos)) {
+            for (const [tela, piezas] of Object.entries(grupos)) {
+                // Métricas acumuladas del grupo de tela
+                const totalMetros = piezas.reduce((acc, p) => acc + Number(p.metros), 0).toFixed(1);
+                const totalPeso = piezas.reduce((acc, p) => acc + Number(p.peso), 0).toFixed(1);
+
                 const trGrupo = document.createElement('tr');
                 trGrupo.className = 'group-header';
-                trGrupo.innerHTML = `<td colspan="5"><i class="ph ph-caret-down"></i> ${tela} (${rollos.length} rollos)</td>`;
+                trGrupo.innerHTML = `
+                    <td colspan="7">
+                        <i class="ph ph-caret-down"></i> <strong>${tela}</strong> 
+                        <span style="margin-left: 10px; font-weight:normal; font-size:0.8rem; color:#475569;">
+                            (${piezas.length} piezas físicas | Stock: ${totalMetros} m | ${totalPeso} kg)
+                        </span>
+                    </td>
+                `;
                 tbody.appendChild(trGrupo);
 
-                rollos.forEach(rollo => {
+                piezas.forEach(pieza => {
+                    const presentacion = pieza.presentacion || 'Rollo';
+                    const composicion = pieza.composicion || 'N/A';
+
                     const tr = document.createElement('tr');
                     tr.className = 'data-row';
-                    tr.dataset.id = rollo.id;
+                    tr.dataset.id = pieza.id;
                     tr.innerHTML = `
-                        <td style="font-family:monospace; color:var(--primary); font-weight:600;">${rollo.id}</td>
-                        <td>${rollo.color}</td>
-                        <td>${rollo.metros} m</td>
-                        <td>${rollo.peso} kg</td>
-                        <td><span class="badge badge-b${rollo.bodega}">Bodega ${rollo.bodega}</span></td>
+                        <td style="font-family:monospace; color:var(--primary); font-weight:600;">${pieza.id}</td>
+                        <td><span class="badge" style="background:#f1f5f9; color:#334155; border:1px solid #cbd5e1;">${presentacion}</span></td>
+                        <td>${pieza.color}</td>
+                        <td style="font-size:0.8rem; color:var(--text-muted);">${composicion}</td>
+                        <td><strong>${pieza.metros} m</strong></td>
+                        <td>${pieza.peso} kg</td>
+                        <td><span class="badge badge-b${pieza.bodega}">Bodega ${pieza.bodega}</span></td>
                     `;
                     tbody.appendChild(tr);
                 });
             }
 
             if (filtrados.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="5" style="text-align:center; padding:20px; color:var(--text-muted);">No hay rollos registrados en esta bodega.</td></tr>';
+                tbody.innerHTML = '<tr><td colspan="7" style="text-align:center; padding:20px; color:var(--text-muted);">No hay piezas/telas registradas en esta bodega.</td></tr>';
             }
         },
 
@@ -350,13 +415,14 @@
                     tr.innerHTML = `
                         <td style="font-family:monospace; color:var(--primary); font-weight:600;">${r.id}</td>
                         <td>${r.tela}</td>
+                        <td><span class="badge" style="background:#f1f5f9; color:#334155;">${r.presentacion || 'Rollo'}</span></td>
                         <td><span class="badge badge-b${r.bodega}">Bodega ${r.bodega}</span></td>
-                        <td>${r.metros} m</td>
+                        <td><strong>${r.metros} m</strong></td>
                     `;
                     tbody.appendChild(tr);
                 });
                 if (ultimos.length === 0) {
-                    tbody.innerHTML = '<tr><td colspan="4" style="text-align:center; padding:15px; color:var(--text-muted);">Sin ingresos recientes.</td></tr>';
+                    tbody.innerHTML = '<tr><td colspan="5" style="text-align:center; padding:15px; color:var(--text-muted);">Sin ingresos recientes.</td></tr>';
                 }
             }
 
@@ -420,7 +486,7 @@
             }
         },
 
-        /* ---------- Operaciones CRUD ---------- */
+        /* ---------- Operaciones CRUD e Ingresos ---------- */
         generarId() {
             const timestamp = Date.now().toString(36).toUpperCase().slice(-5);
             const random = Math.random().toString(36).substring(2, 5).toUpperCase();
@@ -430,11 +496,13 @@
         async registrarNuevoRollo(e) {
             e.preventDefault();
             const nombre = document.getElementById('reg-nombre').value.trim();
+            const presentacion = document.getElementById('reg-presentacion').value;
+            const composicion = document.getElementById('reg-composicion').value.trim();
             const color = document.getElementById('reg-color').value.trim();
             const metros = parseFloat(document.getElementById('reg-metros').value);
             const peso = parseFloat(document.getElementById('reg-peso').value);
 
-            if (!nombre || !color || isNaN(metros) || isNaN(peso) || metros <= 0 || peso <= 0) {
+            if (!nombre || !presentacion || !composicion || !color || isNaN(metros) || isNaN(peso) || metros <= 0 || peso <= 0) {
                 this.mostrarToast('Por favor completa todos los campos con datos válidos.', 'error');
                 return;
             }
@@ -442,6 +510,8 @@
             const nuevo = {
                 id: this.generarId(),
                 tela: nombre,
+                presentacion: presentacion,
+                composicion: composicion,
                 color: color,
                 metros: metros,
                 peso: peso,
@@ -451,14 +521,14 @@
             };
 
             this.inventario.push(nuevo);
-            this.registrarMovimiento('INGRESO', this.bodegaActiva, `Rollo ${nuevo.id} (${nuevo.tela} - ${color})`);
+            this.registrarMovimiento('INGRESO', this.bodegaActiva, `Entrada de ${nuevo.presentacion} ${nuevo.id} (${nuevo.tela} - ${color} - ${composicion})`);
             await this.guardarDatos();
             this.renderTablaBodega();
 
             const formRegistro = document.getElementById('form-registro');
             if (formRegistro) formRegistro.reset();
 
-            this.mostrarToast(`Rollo ${nuevo.id} registrado con éxito.`);
+            this.mostrarToast(`Pieza ${nuevo.id} (${nuevo.presentacion}) ingresada con éxito.`);
             this.abrirDetalles(nuevo.id);
         },
 
@@ -469,13 +539,15 @@
 
             document.getElementById('det-id').textContent = rollo.id;
             document.getElementById('det-tela').textContent = rollo.tela;
+            document.getElementById('det-presentacion').textContent = rollo.presentacion || 'Rollo';
+            document.getElementById('det-composicion').textContent = rollo.composicion || 'N/A';
             document.getElementById('det-color').textContent = rollo.color;
             document.getElementById('det-metros').textContent = rollo.metros;
             document.getElementById('det-peso').textContent = rollo.peso;
             document.getElementById('det-bodega').textContent = `Bodega ${rollo.bodega}`;
             document.getElementById('det-fecha').textContent = rollo.fecha;
 
-            // Generar vista previa del QR con margen blanco (Quiet Zone) de alta precisión
+            // Generar vista previa del QR con Quiet Zone nítido
             const qrContainer = document.getElementById('modal-qr-preview');
             if (qrContainer) {
                 qrContainer.innerHTML = '';
@@ -520,17 +592,14 @@
             let dataUrl = null;
 
             if (canvas) {
-                // Generar canvas con margen blanco (Quiet Zone) explícito para máxima compatibilidad al escanear
                 const padding = 20;
                 const exportCanvas = document.createElement('canvas');
                 exportCanvas.width = canvas.width + (padding * 2);
                 exportCanvas.height = canvas.height + (padding * 2);
                 const ctx = exportCanvas.getContext('2d');
 
-                // Fondo blanco
                 ctx.fillStyle = '#ffffff';
                 ctx.fillRect(0, 0, exportCanvas.width, exportCanvas.height);
-                // Dibujar QR original en el centro
                 ctx.drawImage(canvas, padding, padding);
 
                 dataUrl = exportCanvas.toDataURL('image/png');
@@ -556,23 +625,37 @@
             if (modal) modal.classList.remove('active');
         },
 
+        /* ---------- Salidas Pieza por Pieza ---------- */
         async registrarSalida() {
             if (!this.rolloSeleccionado || this.rolloSeleccionado.estado !== 'Activo') return;
-            if (!confirm(`¿Confirmas dar de SALIDA al rollo ${this.rolloSeleccionado.id}?`)) return;
+
+            const confirmacion = confirm(`📦 ¿Confirmar SALIDA de la pieza (${this.rolloSeleccionado.presentacion}): ${this.rolloSeleccionado.id}?`);
+            if (!confirmacion) return;
 
             this.rolloSeleccionado.estado = 'Salida';
-            this.registrarMovimiento('SALIDA', this.rolloSeleccionado.bodega, `Rollo ${this.rolloSeleccionado.id} despachado del inventario.`);
+            this.registrarMovimiento(
+                'SALIDA',
+                this.rolloSeleccionado.bodega,
+                `Salida de ${this.rolloSeleccionado.presentacion} ${this.rolloSeleccionado.id} (${this.rolloSeleccionado.tela} - ${this.rolloSeleccionado.composicion || ''}).`
+            );
             await this.guardarDatos();
             this.cerrarModal('modal-detalles');
-            this.mostrarToast('Salida de inventario registrada con éxito.', 'success');
+            this.mostrarToast(`✅ Salida de ${this.rolloSeleccionado.presentacion} ${this.rolloSeleccionado.id} registrada con éxito.`, 'success');
+            
             this.renderTablaBodega();
             if (this.vistaActual === 'dashboard') this.renderDashboard();
+            if (this.vistaActual === 'escaner') {
+                // Volver a activar escáner para la siguiente pieza
+                setTimeout(() => this.iniciarScanner(), 400);
+            }
         },
 
         abrirEdicionAdmin() {
             if (!this.rolloSeleccionado || this.rol !== 'admin') return;
             document.getElementById('edit-id-display').textContent = `(${this.rolloSeleccionado.id})`;
             document.getElementById('edit-nombre').value = this.rolloSeleccionado.tela;
+            document.getElementById('edit-presentacion').value = this.rolloSeleccionado.presentacion || 'Rollo';
+            document.getElementById('edit-composicion').value = this.rolloSeleccionado.composicion || '';
             document.getElementById('edit-color').value = this.rolloSeleccionado.color;
             document.getElementById('edit-metros').value = this.rolloSeleccionado.metros;
             document.getElementById('edit-peso').value = this.rolloSeleccionado.peso;
@@ -585,11 +668,13 @@
             if (!this.rolloSeleccionado) return;
 
             this.rolloSeleccionado.tela = document.getElementById('edit-nombre').value.trim();
+            this.rolloSeleccionado.presentacion = document.getElementById('edit-presentacion').value;
+            this.rolloSeleccionado.composicion = document.getElementById('edit-composicion').value.trim();
             this.rolloSeleccionado.color = document.getElementById('edit-color').value.trim();
             this.rolloSeleccionado.metros = parseFloat(document.getElementById('edit-metros').value);
             this.rolloSeleccionado.peso = parseFloat(document.getElementById('edit-peso').value);
 
-            this.registrarMovimiento('EDICIÓN', this.rolloSeleccionado.bodega, `Administrador modificó el rollo ${this.rolloSeleccionado.id}`);
+            this.registrarMovimiento('EDICIÓN', this.rolloSeleccionado.bodega, `Administrador modificó ${this.rolloSeleccionado.id}`);
             await this.guardarDatos();
             this.cerrarModal('modal-editar');
             this.mostrarToast('Cambios guardados correctamente.');
@@ -601,15 +686,15 @@
 
         async eliminarRolloAdmin() {
             if (!this.rolloSeleccionado || this.rol !== 'admin') return;
-            if (!confirm(`⚠️ ¿Eliminar permanentemente el rollo ${this.rolloSeleccionado.id}?`)) return;
+            if (!confirm(`⚠️ ¿Eliminar permanentemente la pieza ${this.rolloSeleccionado.id}?`)) return;
 
             const idEliminado = this.rolloSeleccionado.id;
             const bodegaTarget = this.rolloSeleccionado.bodega;
             this.inventario = this.inventario.filter(r => r.id !== idEliminado);
-            this.registrarMovimiento('ELIMINACIÓN', bodegaTarget, `Administrador eliminó el rollo ${idEliminado}`);
+            this.registrarMovimiento('ELIMINACIÓN', bodegaTarget, `Administrador eliminó ${idEliminado}`);
             await this.guardarDatos();
             this.cerrarModal('modal-detalles');
-            this.mostrarToast('Rollo eliminado del sistema.', 'error');
+            this.mostrarToast('Pieza eliminada del sistema.', 'error');
 
             if (this.vistaActual === 'dashboard') this.renderDashboard();
             else this.renderTablaBodega();
@@ -626,7 +711,7 @@
             this.guardarDatos();
         },
 
-        /* ---------- Lector de Archivos de Imagen QR Directo (Alta Precisión) ---------- */
+        /* ---------- Lector de Archivos de Imagen QR Directo ---------- */
         async procesarArchivoImagenQR(e) {
             const file = e.target.files[0];
             if (!file) return;
@@ -635,7 +720,6 @@
             if (resultEl) resultEl.innerHTML = '<span style="color:var(--primary);">🔍 Procesando y escaneando imagen...</span>';
 
             try {
-                // Usar Html5Qrcode directo con escaneo completo a resolución nativa
                 const html5Qrcode = new Html5Qrcode("scanner-container");
                 const decodedText = await html5Qrcode.scanFile(file, true);
 
@@ -646,12 +730,12 @@
                 if (rollo) {
                     this.abrirDetalles(rollo.id);
                 } else {
-                    this.mostrarToast(`El código (${decodedText}) no pertenece a ningún rollo registrado en el inventario.`, 'error');
+                    this.mostrarToast(`El código (${decodedText}) no pertenece a ningún producto registrado.`, 'error');
                 }
             } catch (err) {
                 console.error('Error al decodificar imagen QR:', err);
                 if (resultEl) {
-                    resultEl.innerHTML = '<span style="color:var(--danger);">❌ No se detectó ningún código QR en la imagen. Asegúrate de que la imagen tenga un marco blanco alrededor del código QR.</span>';
+                    resultEl.innerHTML = '<span style="color:var(--danger);">❌ No se detectó ningún código QR en la imagen.</span>';
                 }
                 this.mostrarToast('No se pudo decodificar el código QR de esta imagen.', 'error');
             } finally {
@@ -659,7 +743,7 @@
             }
         },
 
-        /* ---------- Escáner QR de Cámara ---------- */
+        /* ---------- Escáner QR de Cámara (Salidas Pieza por Pieza) ---------- */
         iniciarScanner() {
             const container = document.getElementById('scanner-container');
             if (!container) return;
@@ -690,7 +774,7 @@
                     if (rollo) {
                         this.abrirDetalles(rollo.id);
                     } else {
-                        this.mostrarToast('El código QR no pertenece a ningún rollo en el inventario.', 'error');
+                        this.mostrarToast('El código QR no pertenece a ningún producto registrado.', 'error');
                     }
                 },
                 (error) => {
@@ -762,7 +846,7 @@
             }
         },
 
-        /* ---------- Impresión de Etiquetas QR (Con Quiet Zone Garantizado) ---------- */
+        /* ---------- Impresión de Etiquetas QR ---------- */
         imprimirQR() {
             if (!this.rolloSeleccionado) return;
 
@@ -780,7 +864,8 @@
                     <style>
                         body { margin: 1cm; font-family: system-ui, -apple-system, sans-serif; text-align: center; color: #000; }
                         .etiqueta { border: 2px dashed #000; padding: 20px; width: 85mm; margin: auto; border-radius: 8px; }
-                        h3 { margin: 0 0 10px 0; font-size: 14pt; font-weight: 800; text-transform: uppercase; }
+                        h3 { margin: 0 0 5px 0; font-size: 14pt; font-weight: 800; text-transform: uppercase; }
+                        .badge-type { display: inline-block; font-size: 9pt; font-weight: bold; background: #e2e8f0; padding: 2px 8px; border-radius: 4px; margin-bottom: 8px; }
                         p { margin: 4px 0; font-size: 10pt; }
                         .qr-box { margin: 15px auto; display: flex; justify-content: center; align-items: center; background: #fff; padding: 10px; border-radius: 6px; }
                         .qr-box img, .qr-box canvas { display: block; margin: 0 auto; }
@@ -792,6 +877,8 @@
                 <body>
                     <div class="etiqueta">
                         <h3>${this.rolloSeleccionado.tela}</h3>
+                        <div class="badge-type">Empaque: ${this.rolloSeleccionado.presentacion || 'Rollo'}</div>
+                        <p><strong>Composición:</strong> ${this.rolloSeleccionado.composicion || 'N/A'}</p>
                         <p><strong>Color:</strong> ${this.rolloSeleccionado.color}</p>
                         <p><strong>Metros:</strong> ${this.rolloSeleccionado.metros} m | <strong>Peso:</strong> ${this.rolloSeleccionado.peso} kg</p>
                         <div id="qr-temp" class="qr-box"></div>
@@ -827,10 +914,10 @@
                 return;
             }
 
-            let csv = '\uFEFFID,Tela,Color,Metros,Peso,Bodega,Estado,Fecha\n';
+            let csv = '\uFEFFID,Tela,Empaque,Composicion,Color,Metros,Peso,Bodega,Estado,Fecha\n';
             this.inventario.forEach(r => {
                 const escapeCsv = (str) => `"${String(str).replace(/"/g, '""')}"`;
-                csv += `${r.id},${escapeCsv(r.tela)},${escapeCsv(r.color)},${r.metros},${r.peso},${r.bodega},${r.estado},"${r.fecha}"\n`;
+                csv += `${r.id},${escapeCsv(r.tela)},${escapeCsv(r.presentacion || 'Rollo')},${escapeCsv(r.composicion || 'N/A')},${escapeCsv(r.color)},${r.metros},${r.peso},${r.bodega},${r.estado},"${r.fecha}"\n`;
             });
 
             const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });

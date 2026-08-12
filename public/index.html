@@ -74,8 +74,9 @@
                     <table>
                         <thead>
                             <tr>
-                                <th>ID Rollo</th>
+                                <th>ID Rollo/Pieza</th>
                                 <th>Tela</th>
+                                <th>Empaque</th>
                                 <th>Bodega</th>
                                 <th>Metros</th>
                             </tr>
@@ -92,12 +93,32 @@
                 <h2 id="titulo-bodega"><i class="ph ph-warehouse" aria-hidden="true"></i> Gestión de Bodega</h2>
                 <span id="badge-bodega" class="badge"></span>
             </div>
+            
+            <!-- FORMULARIO DE INGRESO AUMENTANDO O REGISTRANDO STOCK -->
             <div class="card">
-                <h3 class="card-title"><i class="ph ph-plus-circle" aria-hidden="true"></i> Registrar Nuevo Rollo</h3>
+                <h3 class="card-title"><i class="ph ph-plus-circle" aria-hidden="true"></i> Entrada de Producto / Incrementar Stock</h3>
                 <form id="form-registro" class="grid-form">
                     <div class="input-group">
-                        <label for="reg-nombre">Tipo de Tela</label>
+                        <label for="reg-tela-existente">Asignar a Tipo de Tela Existente</label>
+                        <select id="reg-tela-existente">
+                            <option value="">+ Registrar Nueva Tela...</option>
+                        </select>
+                    </div>
+                    <div class="input-group">
+                        <label for="reg-nombre">Nombre de Tipo de Tela</label>
                         <input type="text" id="reg-nombre" placeholder="Ej. Algodón Peinado" required>
+                    </div>
+                    <div class="input-group">
+                        <label for="reg-presentacion">Presentación / Empaque</label>
+                        <select id="reg-presentacion" required>
+                            <option value="Rollo">Rollo</option>
+                            <option value="Bulto">Bulto</option>
+                            <option value="Paquete">Paquete</option>
+                        </select>
+                    </div>
+                    <div class="input-group">
+                        <label for="reg-composicion">Composición de la Tela</label>
+                        <input type="text" id="reg-composicion" placeholder="Ej. 100% Algodón Peinado" required>
                     </div>
                     <div class="input-group">
                         <label for="reg-color">Color</label>
@@ -111,24 +132,28 @@
                         <label for="reg-peso">Peso (Kg)</label>
                         <input type="number" id="reg-peso" step="0.1" min="0.1" placeholder="Ej. 25" required>
                     </div>
-                    <div class="input-group" style="justify-content: flex-end;">
+                    <div class="input-group" style="justify-content: flex-end; grid-column: 1 / -1;">
                         <button type="submit" class="btn btn-primary" style="height: 42px;">
-                            <i class="ph ph-barcode" aria-hidden="true"></i> Generar QR e Ingresar
+                            <i class="ph ph-barcode" aria-hidden="true"></i> Generar QR e Ingresar Pieza
                         </button>
                     </div>
                 </form>
             </div>
+
+            <!-- INVENTARIO AGRUPADO POR TELA Y STOCK ACUMULADO -->
             <div class="card">
                 <div class="header" style="margin-bottom: 15px;">
-                    <h3 class="card-title" style="margin:0;">Inventario Agrupado</h3>
-                    <input type="text" id="buscador-bodega" placeholder="🔍 Buscar por ID, tela o color..." style="padding: 10px 12px; border-radius: 8px; border: 1px solid var(--border); width: 100%; max-width: 320px;">
+                    <h3 class="card-title" style="margin:0;">Inventario Agrupado y Stock</h3>
+                    <input type="text" id="buscador-bodega" placeholder="🔍 Buscar por ID, tela, empaque, composición o color..." style="padding: 10px 12px; border-radius: 8px; border: 1px solid var(--border); width: 100%; max-width: 380px;">
                 </div>
                 <div class="table-container">
                     <table>
                         <thead>
                             <tr>
                                 <th>ID (QR Único)</th>
+                                <th>Empaque</th>
                                 <th>Color</th>
+                                <th>Composición</th>
                                 <th>Metros</th>
                                 <th>Peso</th>
                                 <th>Estado</th>
@@ -140,14 +165,14 @@
             </div>
         </section>
 
-        <!-- VISTA: ESCÁNER TERMINAL -->
+        <!-- VISTA: ESCÁNER TERMINAL (ENTRADAS Y SALIDAS PIEZA POR PIEZA) -->
         <section id="vista-escaner" class="view-section" role="tabpanel">
             <div class="header">
-                <h2><i class="ph ph-scan" aria-hidden="true"></i> Terminal de Escaneo QR</h2>
+                <h2><i class="ph ph-scan" aria-hidden="true"></i> Terminal de Escaneo y Despacho de Salidas</h2>
             </div>
             <div class="card" style="text-align: center;">
                 <p style="color: var(--text-muted); margin-bottom: 20px;">
-                    Apunta la cámara al código QR o sube una imagen descargada.
+                    Apunta la cámara para escanear las piezas (rollos, bultos, paquetes) <strong>pieza por pieza</strong> para despachar salidas.
                 </p>
                 <div id="scanner-container"></div>
                 
@@ -204,11 +229,11 @@
         </div>
     </div>
 
-    <!-- Modal: Detalles y Ficha del Rollo -->
+    <!-- Modal: Ficha del Producto y Despacho de Salidas Pieza por Pieza -->
     <div id="modal-detalles" class="modal-overlay">
         <div class="modal-card">
             <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px;">
-                <h2 style="margin:0;">Ficha del Rollo</h2>
+                <h2 style="margin:0;">Ficha del Producto</h2>
                 <button class="btn btn-sm btn-outline" id="btn-cerrar-detalles" aria-label="Cerrar modal">
                     <i class="ph ph-x" aria-hidden="true"></i>
                 </button>
@@ -227,6 +252,8 @@
 
             <div class="grid-form" style="margin-bottom: 20px;">
                 <div><span style="color:var(--text-muted); font-size:0.8rem;">Tela:</span><br><strong id="det-tela"></strong></div>
+                <div><span style="color:var(--text-muted); font-size:0.8rem;">Empaque:</span><br><strong id="det-presentacion"></strong></div>
+                <div><span style="color:var(--text-muted); font-size:0.8rem;">Composición:</span><br><strong id="det-composicion"></strong></div>
                 <div><span style="color:var(--text-muted); font-size:0.8rem;">Color:</span><br><strong id="det-color"></strong></div>
                 <div><span style="color:var(--text-muted); font-size:0.8rem;">Metros:</span><br><strong id="det-metros"></strong> m</div>
                 <div><span style="color:var(--text-muted); font-size:0.8rem;">Peso:</span><br><strong id="det-peso"></strong> kg</div>
@@ -237,15 +264,15 @@
                 <button class="btn btn-outline" id="btn-reimprimir">
                     <i class="ph ph-printer" aria-hidden="true"></i> Reimprimir Etiqueta Formato Térmico
                 </button>
-                <button class="btn btn-danger" id="btn-salida">
-                    <i class="ph ph-sign-out" aria-hidden="true"></i> Registrar Salida del Inventario
+                <button class="btn btn-danger" id="btn-salida" style="padding: 12px 20px; font-size: 1rem;">
+                    <i class="ph ph-sign-out" aria-hidden="true"></i> 📦 Registrar Salida de Producto (Pieza por Pieza)
                 </button>
                 <div id="admin-actions" style="display:none; flex-direction:column; gap:10px; margin-top:10px; padding-top:10px; border-top:1px solid var(--border);">
                     <button class="btn btn-warning" id="btn-editar-admin">
-                        <i class="ph ph-pencil-simple" aria-hidden="true"></i> Editar Rollo (Admin)
+                        <i class="ph ph-pencil-simple" aria-hidden="true"></i> Editar Producto (Admin)
                     </button>
                     <button class="btn btn-outline" style="color:var(--danger); border-color:var(--danger);" id="btn-eliminar-admin">
-                        <i class="ph ph-trash" aria-hidden="true"></i> Eliminar Rollo (Admin)
+                        <i class="ph ph-trash" aria-hidden="true"></i> Eliminar Producto (Admin)
                     </button>
                 </div>
             </div>
@@ -255,11 +282,23 @@
     <!-- Modal: Edición (Sólo Admin) -->
     <div id="modal-editar" class="modal-overlay">
         <div class="modal-card">
-            <h2 style="margin-top:0;">Editar Rollo <span id="edit-id-display" style="font-size:0.9rem; color:var(--primary);"></span></h2>
+            <h2 style="margin-top:0;">Editar Producto <span id="edit-id-display" style="font-size:0.9rem; color:var(--primary);"></span></h2>
             <form id="form-editar" class="grid-form">
                 <div class="input-group">
-                    <label for="edit-nombre">Tipo de Tela</label>
+                    <label for="edit-nombre">Nombre de Tela</label>
                     <input type="text" id="edit-nombre" required>
+                </div>
+                <div class="input-group">
+                    <label for="edit-presentacion">Empaque</label>
+                    <select id="edit-presentacion" required>
+                        <option value="Rollo">Rollo</option>
+                        <option value="Bulto">Bulto</option>
+                        <option value="Paquete">Paquete</option>
+                    </select>
+                </div>
+                <div class="input-group">
+                    <label for="edit-composicion">Composición</label>
+                    <input type="text" id="edit-composicion" required>
                 </div>
                 <div class="input-group">
                     <label for="edit-color">Color</label>

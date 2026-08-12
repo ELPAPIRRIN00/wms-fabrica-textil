@@ -11,11 +11,11 @@ app.use(express.json());
 // Servir archivos estáticos de la carpeta public
 app.use(express.static(path.join(__dirname, 'public')));
 
-// Datos en memoria
+// Datos en memoria con presentación y composición
 let inventario = [
-    { id: 'HAM-1001', tela: 'Algodón Peinado', color: 'Blanco Óptico', metros: 120, peso: 25, bodega: 1, fecha: new Date().toLocaleString(), estado: 'Activo' },
-    { id: 'HAM-1002', tela: 'Algodón Peinado', color: 'Negro Intenso', metros: 80, peso: 18, bodega: 1, fecha: new Date().toLocaleString(), estado: 'Activo' },
-    { id: 'HAM-1003', tela: 'Poliéster Deportivo', color: 'Azul Marino', metros: 200, peso: 40, bodega: 2, fecha: new Date().toLocaleString(), estado: 'Activo' }
+    { id: 'HAM-1001', tela: 'Algodón Peinado', color: 'Blanco Óptico', presentacion: 'Rollo', composicion: '100% Algodón Peinado', metros: 120, peso: 25, bodega: 1, fecha: new Date().toLocaleString(), estado: 'Activo' },
+    { id: 'HAM-1002', tela: 'Algodón Peinado', color: 'Negro Intenso', presentacion: 'Rollo', composicion: '100% Algodón Peinado', metros: 80, peso: 18, bodega: 1, fecha: new Date().toLocaleString(), estado: 'Activo' },
+    { id: 'HAM-1003', tela: 'Poliéster Deportivo', color: 'Azul Marino', presentacion: 'Bulto', composicion: '100% Poliéster', metros: 200, peso: 40, bodega: 2, fecha: new Date().toLocaleString(), estado: 'Activo' }
 ];
 
 let bitacora = [
