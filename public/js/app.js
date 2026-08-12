@@ -30,6 +30,18 @@
             this.verificarSesion();
         },
 
+        obtenerFechaActual() {
+            const ahora = new Date();
+            return ahora.toLocaleString('es-MX', {
+                year: 'numeric',
+                month: '2-digit',
+                day: '2-digit',
+                hour: '2-digit',
+                minute: '2-digit',
+                second: '2-digit'
+            });
+        },
+
         async comprobarConexionBackend() {
             try {
                 const res = await fetch('/api/productos', { method: 'GET' });
@@ -60,7 +72,6 @@
                 }
             }
 
-            // Fallback a localStorage con validación correcta para arrays vacíos []
             try {
                 const rawInv = localStorage.getItem('ham_inventario');
                 const rawBit = localStorage.getItem('ham_bitacora');
@@ -74,9 +85,9 @@
 
         getInventarioDemo() {
             return [
-                { id: 'HAM-1001', tela: 'Algodón Peinado', color: 'Blanco Óptico', metros: 120, peso: 25, bodega: 1, fecha: new Date().toLocaleString(), estado: 'Activo' },
-                { id: 'HAM-1002', tela: 'Algodón Peinado', color: 'Negro Intenso', metros: 80, peso: 18, bodega: 1, fecha: new Date().toLocaleString(), estado: 'Activo' },
-                { id: 'HAM-1003', tela: 'Poliéster Deportivo', color: 'Azul Marino', metros: 200, peso: 40, bodega: 2, fecha: new Date().toLocaleString(), estado: 'Activo' }
+                { id: 'HAM-1001', tela: 'Algodón Peinado', color: 'Blanco Óptico', metros: 120, peso: 25, bodega: 1, fecha: this.obtenerFechaActual(), estado: 'Activo' },
+                { id: 'HAM-1002', tela: 'Algodón Peinado', color: 'Negro Intenso', metros: 80, peso: 18, bodega: 1, fecha: this.obtenerFechaActual(), estado: 'Activo' },
+                { id: 'HAM-1003', tela: 'Poliéster Deportivo', color: 'Azul Marino', metros: 200, peso: 40, bodega: 2, fecha: this.obtenerFechaActual(), estado: 'Activo' }
             ];
         },
 
@@ -122,6 +133,7 @@
             const user = document.getElementById('login-user').value.trim().toLowerCase();
             const pass = document.getElementById('login-pass').value.trim();
             const errorEl = document.getElementById('error-login');
+
             if (pass !== '1234') {
                 errorEl.textContent = 'Contraseña incorrecta (Usa 1234)';
                 errorEl.style.display = 'block';
@@ -132,6 +144,7 @@
                 errorEl.style.display = 'block';
                 return;
             }
+
             localStorage.setItem('ham_user', user);
             localStorage.setItem('ham_role', user);
             this.registrarMovimiento('Inicio de Sesión', '-', `Usuario ${user}`);
@@ -146,6 +159,7 @@
             localStorage.removeItem('ham_role');
             this.usuario = null;
             this.rol = null;
+
             const formLogin = document.getElementById('form-login');
             if (formLogin) formLogin.reset();
             const errorLogin = document.getElementById('error-login');
@@ -188,12 +202,12 @@
                 this.bodegaActiva = vista === 'bodega1' ? 1 : 2;
                 const tituloBodega = document.getElementById('titulo-bodega');
                 if (tituloBodega) {
-                    tituloBodega.innerHTML = `<i class="ph ph-warehouse"></i> Bodega ${this.bodegaActiva}`;
+                    tituloBodega.innerHTML = `<i class="ph ph-warehouse"></i> Gestión de Bodega ${this.bodegaActiva}`;
                 }
                 const badge = document.getElementById('badge-bodega');
                 if (badge) {
                     badge.className = `badge badge-b${this.bodegaActiva}`;
-                    badge.textContent = `Ubicación Física: B${this.bodegaActiva}`;
+                    badge.textContent = `Ubicación Física: Bodega ${this.bodegaActiva}`;
                 }
                 const vistaBodegas = document.getElementById('vista-bodegas');
                 if (vistaBodegas) vistaBodegas.classList.add('active');
@@ -222,6 +236,9 @@
             const btnCerrarDetalles = document.getElementById('btn-cerrar-detalles');
             if (btnCerrarDetalles) btnCerrarDetalles.addEventListener('click', () => this.cerrarModal('modal-detalles'));
 
+            const btnDescargarQR = document.getElementById('btn-descargar-qr');
+            if (btnDescargarQR) btnDescargarQR.addEventListener('click', () => this.descargarQR());
+
             const btnReimprimir = document.getElementById('btn-reimprimir');
             if (btnReimprimir) btnReimprimir.addEventListener('click', () => this.imprimirQR());
 
@@ -239,6 +256,11 @@
 
             const formEditar = document.getElementById('form-editar');
             if (formEditar) formEditar.addEventListener('submit', (e) => this.guardarEdicion(e));
+
+            const inputQrFile = document.getElementById('input-qr-file');
+            if (inputQrFile) {
+                inputQrFile.addEventListener('change', (e) => this.procesarArchivoImagenQR(e));
+            }
 
             // Búsqueda en bodega con debounce
             let timeoutBuscador;
@@ -277,7 +299,7 @@
             const buscador = document.getElementById('buscador-bodega');
             const filtro = buscador ? buscador.value.toLowerCase().trim() : '';
             const activos = this.inventario.filter(r => r.bodega === this.bodegaActiva && r.estado === 'Activo');
-            
+
             const filtrados = filtro ? activos.filter(r =>
                 r.id.toLowerCase().includes(filtro) ||
                 r.tela.toLowerCase().includes(filtro) ||
@@ -305,14 +327,14 @@
                         <td>${rollo.color}</td>
                         <td>${rollo.metros} m</td>
                         <td>${rollo.peso} kg</td>
-                        <td><span class="badge badge-b${rollo.bodega}">B${rollo.bodega}</span></td>
+                        <td><span class="badge badge-b${rollo.bodega}">Bodega ${rollo.bodega}</span></td>
                     `;
                     tbody.appendChild(tr);
                 });
             }
 
             if (filtrados.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="5" style="text-align:center; padding:20px; color:var(--text-muted);">No se encontraron rollos registrados.</td></tr>';
+                tbody.innerHTML = '<tr><td colspan="5" style="text-align:center; padding:20px; color:var(--text-muted);">No hay rollos registrados en esta bodega.</td></tr>';
             }
         },
 
@@ -328,7 +350,7 @@
                     tr.innerHTML = `
                         <td style="font-family:monospace; color:var(--primary); font-weight:600;">${r.id}</td>
                         <td>${r.tela}</td>
-                        <td><span class="badge badge-b${r.bodega}">B${r.bodega}</span></td>
+                        <td><span class="badge badge-b${r.bodega}">Bodega ${r.bodega}</span></td>
                         <td>${r.metros} m</td>
                     `;
                     tbody.appendChild(tr);
@@ -349,7 +371,7 @@
             const canvas = document.getElementById('chartBodegas');
             if (!canvas) return;
             const ctx = canvas.getContext('2d');
-            
+
             if (this.chartInstancia) {
                 this.chartInstancia.destroy();
                 this.chartInstancia = null;
@@ -388,7 +410,7 @@
                     <td style="font-size:0.8rem; color:var(--text-muted);">${b.fecha}</td>
                     <td><strong>${b.usuario}</strong></td>
                     <td style="color:var(--primary); font-weight:600;">${b.accion}</td>
-                    <td>${b.bodega === '-' ? '-' : 'B' + b.bodega}</td>
+                    <td>${b.bodega === '-' ? '-' : 'Bodega ' + b.bodega}</td>
                     <td>${b.detalle}</td>
                 `;
                 tbody.appendChild(tr);
@@ -413,7 +435,7 @@
             const peso = parseFloat(document.getElementById('reg-peso').value);
 
             if (!nombre || !color || isNaN(metros) || isNaN(peso) || metros <= 0 || peso <= 0) {
-                this.mostrarToast('Por favor completa los datos válidos.', 'error');
+                this.mostrarToast('Por favor completa todos los campos con datos válidos.', 'error');
                 return;
             }
 
@@ -424,7 +446,7 @@
                 metros: metros,
                 peso: peso,
                 bodega: this.bodegaActiva,
-                fecha: new Date().toLocaleString(),
+                fecha: this.obtenerFechaActual(),
                 estado: 'Activo'
             };
 
@@ -437,8 +459,7 @@
             if (formRegistro) formRegistro.reset();
 
             this.mostrarToast(`Rollo ${nuevo.id} registrado con éxito.`);
-            this.rolloSeleccionado = nuevo;
-            this.imprimirQR();
+            this.abrirDetalles(nuevo.id);
         },
 
         abrirDetalles(id) {
@@ -454,6 +475,27 @@
             document.getElementById('det-bodega').textContent = `Bodega ${rollo.bodega}`;
             document.getElementById('det-fecha').textContent = rollo.fecha;
 
+            // Generar vista previa del QR con margen blanco (Quiet Zone) de alta precisión
+            const qrContainer = document.getElementById('modal-qr-preview');
+            if (qrContainer) {
+                qrContainer.innerHTML = '';
+                if (typeof QRCode !== 'undefined') {
+                    new QRCode(qrContainer, {
+                        text: rollo.id,
+                        width: 150,
+                        height: 150,
+                        colorDark: "#000000",
+                        colorLight: "#ffffff",
+                        correctLevel: QRCode.CorrectLevel.H
+                    });
+                    qrContainer.style.background = '#ffffff';
+                    qrContainer.style.padding = '14px';
+                    qrContainer.style.borderRadius = '8px';
+                    qrContainer.style.display = 'inline-block';
+                    qrContainer.style.border = '1px solid #cbd5e1';
+                }
+            }
+
             const btnSalida = document.getElementById('btn-salida');
             if (btnSalida) {
                 btnSalida.style.display = rollo.estado === 'Activo' ? 'inline-flex' : 'none';
@@ -466,6 +508,47 @@
 
             const modalDetalles = document.getElementById('modal-detalles');
             if (modalDetalles) modalDetalles.classList.add('active');
+        },
+
+        descargarQR() {
+            if (!this.rolloSeleccionado) return;
+            const qrContainer = document.getElementById('modal-qr-preview');
+            if (!qrContainer) return;
+
+            const img = qrContainer.querySelector('img');
+            const canvas = qrContainer.querySelector('canvas');
+            let dataUrl = null;
+
+            if (canvas) {
+                // Generar canvas con margen blanco (Quiet Zone) explícito para máxima compatibilidad al escanear
+                const padding = 20;
+                const exportCanvas = document.createElement('canvas');
+                exportCanvas.width = canvas.width + (padding * 2);
+                exportCanvas.height = canvas.height + (padding * 2);
+                const ctx = exportCanvas.getContext('2d');
+
+                // Fondo blanco
+                ctx.fillStyle = '#ffffff';
+                ctx.fillRect(0, 0, exportCanvas.width, exportCanvas.height);
+                // Dibujar QR original en el centro
+                ctx.drawImage(canvas, padding, padding);
+
+                dataUrl = exportCanvas.toDataURL('image/png');
+            } else if (img && img.src) {
+                dataUrl = img.src;
+            }
+
+            if (dataUrl) {
+                const a = document.createElement('a');
+                a.href = dataUrl;
+                a.download = `QR_${this.rolloSeleccionado.id}.png`;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                this.mostrarToast('Código QR descargado como imagen PNG de alta precisión.');
+            } else {
+                this.mostrarToast('No se pudo generar la imagen para descarga.', 'error');
+            }
         },
 
         cerrarModal(id) {
@@ -506,7 +589,7 @@
             this.rolloSeleccionado.metros = parseFloat(document.getElementById('edit-metros').value);
             this.rolloSeleccionado.peso = parseFloat(document.getElementById('edit-peso').value);
 
-            this.registrarMovimiento('EDICIÓN', this.rolloSeleccionado.bodega, `Admin modificó ${this.rolloSeleccionado.id}`);
+            this.registrarMovimiento('EDICIÓN', this.rolloSeleccionado.bodega, `Administrador modificó el rollo ${this.rolloSeleccionado.id}`);
             await this.guardarDatos();
             this.cerrarModal('modal-editar');
             this.mostrarToast('Cambios guardados correctamente.');
@@ -523,7 +606,7 @@
             const idEliminado = this.rolloSeleccionado.id;
             const bodegaTarget = this.rolloSeleccionado.bodega;
             this.inventario = this.inventario.filter(r => r.id !== idEliminado);
-            this.registrarMovimiento('ELIMINACIÓN', bodegaTarget, `Admin eliminó ${idEliminado}`);
+            this.registrarMovimiento('ELIMINACIÓN', bodegaTarget, `Administrador eliminó el rollo ${idEliminado}`);
             await this.guardarDatos();
             this.cerrarModal('modal-detalles');
             this.mostrarToast('Rollo eliminado del sistema.', 'error');
@@ -534,8 +617,8 @@
 
         registrarMovimiento(accion, bodega, detalle) {
             this.bitacora.unshift({
-                fecha: new Date().toLocaleString(),
-                usuario: this.usuario || 'Sistema',
+                fecha: this.obtenerFechaActual(),
+                usuario: this.usuario ? this.usuario.toUpperCase() : 'Sistema',
                 accion: accion,
                 bodega: bodega,
                 detalle: detalle
@@ -543,20 +626,56 @@
             this.guardarDatos();
         },
 
-        /* ---------- Escáner QR de Cámara / Archivo ---------- */
+        /* ---------- Lector de Archivos de Imagen QR Directo (Alta Precisión) ---------- */
+        async procesarArchivoImagenQR(e) {
+            const file = e.target.files[0];
+            if (!file) return;
+
+            const resultEl = document.getElementById('qr-file-result');
+            if (resultEl) resultEl.innerHTML = '<span style="color:var(--primary);">🔍 Procesando y escaneando imagen...</span>';
+
+            try {
+                // Usar Html5Qrcode directo con escaneo completo a resolución nativa
+                const html5Qrcode = new Html5Qrcode("scanner-container");
+                const decodedText = await html5Qrcode.scanFile(file, true);
+
+                if (resultEl) resultEl.innerHTML = `<span style="color:var(--success);">✅ ¡Código Detectado!: ${decodedText}</span>`;
+                this.mostrarToast(`Código detectado: ${decodedText}`);
+
+                const rollo = this.inventario.find(r => r.id === decodedText);
+                if (rollo) {
+                    this.abrirDetalles(rollo.id);
+                } else {
+                    this.mostrarToast(`El código (${decodedText}) no pertenece a ningún rollo registrado en el inventario.`, 'error');
+                }
+            } catch (err) {
+                console.error('Error al decodificar imagen QR:', err);
+                if (resultEl) {
+                    resultEl.innerHTML = '<span style="color:var(--danger);">❌ No se detectó ningún código QR en la imagen. Asegúrate de que la imagen tenga un marco blanco alrededor del código QR.</span>';
+                }
+                this.mostrarToast('No se pudo decodificar el código QR de esta imagen.', 'error');
+            } finally {
+                e.target.value = '';
+            }
+        },
+
+        /* ---------- Escáner QR de Cámara ---------- */
         iniciarScanner() {
             const container = document.getElementById('scanner-container');
             if (!container) return;
             container.innerHTML = '';
 
             if (typeof Html5QrcodeScanner === 'undefined') {
-                container.innerHTML = '<p style="padding:20px; color:var(--danger);">Cargando lector QR...</p>';
+                container.innerHTML = '<p style="padding:20px; color:var(--danger);">Cargando lector de código QR...</p>';
                 return;
             }
 
             this.scanner = new Html5QrcodeScanner("scanner-container", {
                 fps: 10,
                 qrbox: { width: 240, height: 240 },
+                experimentalFeatures: {
+                    useBarCodeDetectorIfSupported: true
+                },
                 supportedScanTypes: [
                     Html5QrcodeScanType.SCAN_TYPE_CAMERA,
                     Html5QrcodeScanType.SCAN_TYPE_FILE
@@ -571,13 +690,62 @@
                     if (rollo) {
                         this.abrirDetalles(rollo.id);
                     } else {
-                        this.mostrarToast('El QR no corresponde a ningún rollo registrado.', 'error');
+                        this.mostrarToast('El código QR no pertenece a ningún rollo en el inventario.', 'error');
                     }
                 },
                 (error) => {
-                    // Silenciar mensajes informativos continuos del scanner
+                    // Silenciar mensajes continuos
                 }
             );
+
+            this.traducirEscanerAEspanol();
+        },
+
+        traducirEscanerAEspanol() {
+            const container = document.getElementById('scanner-container');
+            if (!container) return;
+
+            const traducirTextos = () => {
+                const btnPermission = container.querySelector('#html5-qrcode-button-camera-permission');
+                if (btnPermission && btnPermission.textContent.includes('Request Camera Permissions')) {
+                    btnPermission.textContent = '🎥 Solicitar Permiso para Usar la Cámara';
+                }
+
+                const btnStart = container.querySelector('#html5-qrcode-button-camera-start');
+                if (btnStart && btnStart.textContent.includes('Start Scanning')) {
+                    btnStart.textContent = '▶️ Iniciar Escáner de Cámara';
+                }
+
+                const btnStop = container.querySelector('#html5-qrcode-button-camera-stop');
+                if (btnStop && btnStop.textContent.includes('Stop Scanning')) {
+                    btnStop.textContent = '⏹️ Detener Escáner';
+                }
+
+                const selectCamera = container.querySelector('#html5-qrcode-select-camera');
+                if (selectCamera && selectCamera.previousSibling && selectCamera.previousSibling.textContent) {
+                    if (selectCamera.previousSibling.textContent.includes('Select Camera')) {
+                        selectCamera.previousSibling.textContent = 'Seleccionar Cámara: ';
+                    }
+                }
+
+                const anchorType = container.querySelector('#html5-qrcode-anchor-scan-type-change');
+                if (anchorType) {
+                    if (anchorType.textContent.includes('Scan an Image File')) {
+                        anchorType.textContent = '📁 Subir o escanear una imagen con código QR';
+                    } else if (anchorType.textContent.includes('Scan using camera directly')) {
+                        anchorType.textContent = '📷 Usar la cámara directamente';
+                    }
+                }
+
+                const fileInputLabel = container.querySelector('#html5-qrcode-button-file-selection');
+                if (fileInputLabel && fileInputLabel.textContent.includes('Choose Image')) {
+                    fileInputLabel.textContent = '🖼️ Seleccionar Imagen de QR';
+                }
+            };
+
+            traducirTextos();
+            const observer = new MutationObserver(traducirTextos);
+            observer.observe(container, { childList: true, subtree: true });
         },
 
         async detenerScanner() {
@@ -586,7 +754,7 @@
                 try {
                     await this.scanner.clear();
                 } catch (e) {
-                    console.warn('Detención limpia de escáner:', e);
+                    console.warn('Detención limpia del escáner:', e);
                 } finally {
                     this.scanner = null;
                     this.scannerLimpiando = false;
@@ -594,7 +762,7 @@
             }
         },
 
-        /* ---------- Impresión de Etiquetas QR (Fix Asíncrono) ---------- */
+        /* ---------- Impresión de Etiquetas QR (Con Quiet Zone Garantizado) ---------- */
         imprimirQR() {
             if (!this.rolloSeleccionado) return;
 
@@ -605,16 +773,16 @@
             doc.open();
             doc.write(`
                 <!DOCTYPE html>
-                <html>
+                <html lang="es">
                 <head>
                     <meta charset="UTF-8">
                     <title>Etiqueta QR - ${this.rolloSeleccionado.id}</title>
                     <style>
-                        body { margin: 1cm; font-family: system-ui, sans-serif; text-align: center; color: #000; }
+                        body { margin: 1cm; font-family: system-ui, -apple-system, sans-serif; text-align: center; color: #000; }
                         .etiqueta { border: 2px dashed #000; padding: 20px; width: 85mm; margin: auto; border-radius: 8px; }
                         h3 { margin: 0 0 10px 0; font-size: 14pt; font-weight: 800; text-transform: uppercase; }
                         p { margin: 4px 0; font-size: 10pt; }
-                        .qr-box { margin: 15px auto; display: flex; justify-content: center; align-items: center; }
+                        .qr-box { margin: 15px auto; display: flex; justify-content: center; align-items: center; background: #fff; padding: 10px; border-radius: 6px; }
                         .qr-box img, .qr-box canvas { display: block; margin: 0 auto; }
                         .code-id { font-family: monospace; font-size: 13pt; font-weight: bold; margin-top: 8px; }
                         .empresa { font-size: 8pt; font-weight: bold; margin-top: 12px; border-top: 1px solid #000; padding-top: 6px; text-transform: uppercase; letter-spacing: 0.5px; }
@@ -628,19 +796,18 @@
                         <p><strong>Metros:</strong> ${this.rolloSeleccionado.metros} m | <strong>Peso:</strong> ${this.rolloSeleccionado.peso} kg</p>
                         <div id="qr-temp" class="qr-box"></div>
                         <div class="code-id">${this.rolloSeleccionado.id}</div>
-                        <div class="empresa">H.A.M. Poo - WMS Textil System</div>
+                        <div class="empresa">H.A.M. Poo - Sistema WMS Textil</div>
                     </div>
                     <script>
                         window.onload = function() {
                             new QRCode(document.getElementById('qr-temp'), {
                                 text: "${this.rolloSeleccionado.id}",
-                                width: 130,
-                                height: 130,
+                                width: 140,
+                                height: 140,
                                 colorDark: "#000000",
                                 colorLight: "#ffffff",
                                 correctLevel: QRCode.CorrectLevel.H
                             });
-                            // Dar 250ms para garantizar el renderizado del Canvas/IMG antes de imprimir
                             setTimeout(function() {
                                 window.focus();
                                 window.print();
@@ -656,7 +823,7 @@
         /* ---------- Exportación a CSV ---------- */
         exportarCSV() {
             if (this.inventario.length === 0) {
-                this.mostrarToast('No hay datos de inventario para exportar.', 'error');
+                this.mostrarToast('No hay datos en el inventario para exportar.', 'error');
                 return;
             }
 
@@ -675,10 +842,10 @@
             a.click();
             document.body.removeChild(a);
             URL.revokeObjectURL(url);
-            this.registrarMovimiento('Exportación', '-', 'Inventario completo exportado a CSV.');
+            this.registrarMovimiento('Exportación', '-', 'Inventario completo exportado a archivo CSV.');
         },
 
-        /* ---------- Toast Notifications ---------- */
+        /* ---------- Notificaciones Toast ---------- */
         mostrarToast(mensaje, tipo = 'success') {
             const container = document.getElementById('toast-container');
             if (!container) return;
@@ -697,6 +864,5 @@
         }
     };
 
-    // Inicializar al cargar el DOM
     window.addEventListener('DOMContentLoaded', () => App.init());
 })();

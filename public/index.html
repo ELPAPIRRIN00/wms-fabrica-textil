@@ -12,7 +12,7 @@
     <script src="https://unpkg.com/html5-qrcode"></script>
     <script src="https://unpkg.com/@phosphor-icons/web"></script>
     
-    <!-- 🔤 Fuents de Google -->
+    <!-- 🔤 Fuentes de Google -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
@@ -146,8 +146,18 @@
                 <h2><i class="ph ph-scan" aria-hidden="true"></i> Terminal de Escaneo QR</h2>
             </div>
             <div class="card" style="text-align: center;">
-                <p style="color: var(--text-muted); margin-bottom: 20px;">Apunta la cámara al código QR del rollo o sube un archivo de imagen.</p>
+                <p style="color: var(--text-muted); margin-bottom: 20px;">
+                    Apunta la cámara al código QR o sube una imagen descargada.
+                </p>
                 <div id="scanner-container"></div>
+                
+                <div style="margin-top: 25px; padding-top: 20px; border-top: 1px dashed var(--border);">
+                    <label for="input-qr-file" class="btn btn-outline" style="cursor: pointer;">
+                        <i class="ph ph-image-square" aria-hidden="true"></i> Subir Imagen de Código QR
+                    </label>
+                    <input type="file" id="input-qr-file" accept="image/*" style="display: none;">
+                    <div id="qr-file-result" style="margin-top: 12px; font-weight: 600; font-size: 0.9rem;"></div>
+                </div>
             </div>
         </section>
 
@@ -197,15 +207,24 @@
     <!-- Modal: Detalles y Ficha del Rollo -->
     <div id="modal-detalles" class="modal-overlay">
         <div class="modal-card">
-            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px;">
                 <h2 style="margin:0;">Ficha del Rollo</h2>
                 <button class="btn btn-sm btn-outline" id="btn-cerrar-detalles" aria-label="Cerrar modal">
                     <i class="ph ph-x" aria-hidden="true"></i>
                 </button>
             </div>
-            <div style="background:#f1f5f9; padding:14px; border-radius:8px; margin-bottom:20px; font-family:monospace; font-size:1.1rem; text-align:center; font-weight:bold; color:var(--primary);">
+            <div style="background:#f1f5f9; padding:12px; border-radius:8px; margin-bottom:15px; font-family:monospace; font-size:1.1rem; text-align:center; font-weight:bold; color:var(--primary);">
                 ID: <span id="det-id"></span>
             </div>
+
+            <!-- Visualizador y Descarga de Código QR -->
+            <div style="text-align: center; margin-bottom: 20px; padding: 15px; background: #f8fafc; border-radius: 12px; border: 1px solid var(--border);">
+                <div id="modal-qr-preview" style="display: flex; justify-content: center; align-items: center; margin-bottom: 12px;"></div>
+                <button class="btn btn-sm btn-outline" id="btn-descargar-qr">
+                    <i class="ph ph-download-simple" aria-hidden="true"></i> Descargar Código QR (PNG)
+                </button>
+            </div>
+
             <div class="grid-form" style="margin-bottom: 20px;">
                 <div><span style="color:var(--text-muted); font-size:0.8rem;">Tela:</span><br><strong id="det-tela"></strong></div>
                 <div><span style="color:var(--text-muted); font-size:0.8rem;">Color:</span><br><strong id="det-color"></strong></div>
@@ -216,10 +235,10 @@
             </div>
             <div style="display:flex; flex-direction:column; gap:10px;">
                 <button class="btn btn-outline" id="btn-reimprimir">
-                    <i class="ph ph-printer" aria-hidden="true"></i> Reimprimir Etiqueta QR
+                    <i class="ph ph-printer" aria-hidden="true"></i> Reimprimir Etiqueta Formato Térmico
                 </button>
                 <button class="btn btn-danger" id="btn-salida">
-                    <i class="ph ph-sign-out" aria-hidden="true"></i> Registrar Salida
+                    <i class="ph ph-sign-out" aria-hidden="true"></i> Registrar Salida del Inventario
                 </button>
                 <div id="admin-actions" style="display:none; flex-direction:column; gap:10px; margin-top:10px; padding-top:10px; border-top:1px solid var(--border);">
                     <button class="btn btn-warning" id="btn-editar-admin">
