@@ -1,0 +1,274 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Sistema de Gestión de Almacén (WMS) Textil Avanzado - Hilaturas y Acabados Modernos Poo">
+    <title>H.A.M. Poo | WMS Textil Avanzado</title>
+
+    <!-- 📦 Dependencias CDN -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+    <script src="https://unpkg.com/html5-qrcode"></script>
+    <script src="https://unpkg.com/@phosphor-icons/web"></script>
+    
+    <!-- 🔤 Fuents de Google -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+
+    <!-- 🎨 Estilos UI/UX -->
+    <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+    <!-- SIDEBAR NAVIGATION -->
+    <nav class="sidebar" aria-label="Navegación principal">
+        <div class="brand">
+            <h1>HILATURAS Y ACABADOS MODERNOS</h1>
+            <span>_ Poo | Sistema WMS</span>
+        </div>
+        <div class="nav-menu" id="nav-menu" role="tablist">
+            <button class="nav-item active" data-view="dashboard" role="tab" aria-selected="true">
+                <i class="ph ph-squares-four" aria-hidden="true"></i> <span>Vista Global</span>
+            </button>
+            <button class="nav-item" data-view="bodega1" role="tab" aria-selected="false">
+                <i class="ph ph-warehouse" aria-hidden="true"></i> <span>Bodega 1</span>
+            </button>
+            <button class="nav-item" data-view="bodega2" role="tab" aria-selected="false">
+                <i class="ph ph-buildings" aria-hidden="true"></i> <span>Bodega 2</span>
+            </button>
+            <button class="nav-item scanner-highlight" data-view="escaner" role="tab" aria-selected="false">
+                <i class="ph ph-scan" aria-hidden="true"></i> <span>Escáner Terminal</span>
+            </button>
+            <button class="nav-item" data-view="bitacora" role="tab" aria-selected="false">
+                <i class="ph ph-clock-counter-clockwise" aria-hidden="true"></i> <span>Movimientos</span>
+            </button>
+        </div>
+        <div class="user-profile" id="user-area">
+            <strong id="txt-usuario-activo">👤 No identificado</strong>
+            <button class="btn btn-sm btn-outline" id="btn-logout" style="width:100%;">
+                <i class="ph ph-sign-out" aria-hidden="true"></i> Cerrar Sesión
+            </button>
+        </div>
+    </nav>
+
+    <!-- MAIN CONTENT AREA -->
+    <main class="main-content">
+        <!-- VISTA: DASHBOARD -->
+        <section id="vista-dashboard" class="view-section active" role="tabpanel">
+            <div class="header">
+                <h2><i class="ph ph-chart-pie-slice" aria-hidden="true"></i> Vista Global de Fábrica</h2>
+                <button class="btn btn-outline" id="btn-exportar">
+                    <i class="ph ph-download-simple" aria-hidden="true"></i> Exportar CSV
+                </button>
+            </div>
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 20px;">
+                <div class="card">
+                    <h3 class="card-title">Metros Totales por Bodega</h3>
+                    <div style="position: relative; height: 250px; width: 100%;">
+                        <canvas id="chartBodegas" aria-label="Gráfica de Metros por Bodega" role="img"></canvas>
+                    </div>
+                </div>
+                <div class="card table-container">
+                    <h3 class="card-title">Últimos Ingresos</h3>
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>ID Rollo</th>
+                                <th>Tela</th>
+                                <th>Bodega</th>
+                                <th>Metros</th>
+                            </tr>
+                        </thead>
+                        <tbody id="tabla-ultimos"></tbody>
+                    </table>
+                </div>
+            </div>
+        </section>
+
+        <!-- VISTA: BODEGAS (Dinamizada B1/B2) -->
+        <section id="vista-bodegas" class="view-section" role="tabpanel">
+            <div class="header">
+                <h2 id="titulo-bodega"><i class="ph ph-warehouse" aria-hidden="true"></i> Gestión de Bodega</h2>
+                <span id="badge-bodega" class="badge"></span>
+            </div>
+            <div class="card">
+                <h3 class="card-title"><i class="ph ph-plus-circle" aria-hidden="true"></i> Registrar Nuevo Rollo</h3>
+                <form id="form-registro" class="grid-form">
+                    <div class="input-group">
+                        <label for="reg-nombre">Tipo de Tela</label>
+                        <input type="text" id="reg-nombre" placeholder="Ej. Algodón Peinado" required>
+                    </div>
+                    <div class="input-group">
+                        <label for="reg-color">Color</label>
+                        <input type="text" id="reg-color" placeholder="Ej. Azul Marino" required>
+                    </div>
+                    <div class="input-group">
+                        <label for="reg-metros">Metros</label>
+                        <input type="number" id="reg-metros" step="0.1" min="0.1" placeholder="Ej. 100" required>
+                    </div>
+                    <div class="input-group">
+                        <label for="reg-peso">Peso (Kg)</label>
+                        <input type="number" id="reg-peso" step="0.1" min="0.1" placeholder="Ej. 25" required>
+                    </div>
+                    <div class="input-group" style="justify-content: flex-end;">
+                        <button type="submit" class="btn btn-primary" style="height: 42px;">
+                            <i class="ph ph-barcode" aria-hidden="true"></i> Generar QR e Ingresar
+                        </button>
+                    </div>
+                </form>
+            </div>
+            <div class="card">
+                <div class="header" style="margin-bottom: 15px;">
+                    <h3 class="card-title" style="margin:0;">Inventario Agrupado</h3>
+                    <input type="text" id="buscador-bodega" placeholder="🔍 Buscar por ID, tela o color..." style="padding: 10px 12px; border-radius: 8px; border: 1px solid var(--border); width: 100%; max-width: 320px;">
+                </div>
+                <div class="table-container">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>ID (QR Único)</th>
+                                <th>Color</th>
+                                <th>Metros</th>
+                                <th>Peso</th>
+                                <th>Estado</th>
+                            </tr>
+                        </thead>
+                        <tbody id="tabla-bodega-activa"></tbody>
+                    </table>
+                </div>
+            </div>
+        </section>
+
+        <!-- VISTA: ESCÁNER TERMINAL -->
+        <section id="vista-escaner" class="view-section" role="tabpanel">
+            <div class="header">
+                <h2><i class="ph ph-scan" aria-hidden="true"></i> Terminal de Escaneo QR</h2>
+            </div>
+            <div class="card" style="text-align: center;">
+                <p style="color: var(--text-muted); margin-bottom: 20px;">Apunta la cámara al código QR del rollo o sube un archivo de imagen.</p>
+                <div id="scanner-container"></div>
+            </div>
+        </section>
+
+        <!-- VISTA: BITÁCORA DE MOVIMIENTOS -->
+        <section id="vista-bitacora" class="view-section" role="tabpanel">
+            <div class="header">
+                <h2><i class="ph ph-clock-counter-clockwise" aria-hidden="true"></i> Auditoría de Movimientos</h2>
+            </div>
+            <div class="card table-container">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Fecha/Hora</th>
+                            <th>Usuario</th>
+                            <th>Operación</th>
+                            <th>Bodega</th>
+                            <th>Detalle</th>
+                        </tr>
+                    </thead>
+                    <tbody id="tabla-bitacora"></tbody>
+                </table>
+            </div>
+        </section>
+    </main>
+
+    <!-- MODALES DE CONTROL -->
+    <!-- Modal: Login -->
+    <div id="modal-login" class="modal-overlay active">
+        <div class="modal-card">
+            <h2 style="text-align:center; color: var(--primary);">H.A.M. Poo</h2>
+            <p style="text-align:center; color: var(--text-muted); font-size:0.9rem;">Acceso al Sistema WMS Textil</p>
+            <form id="form-login" style="display:flex; flex-direction:column; gap:16px; margin-top:20px;">
+                <div class="input-group">
+                    <label for="login-user">Usuario (admin / operador)</label>
+                    <input type="text" id="login-user" placeholder="Ingresa admin u operador" required>
+                </div>
+                <div class="input-group">
+                    <label for="login-pass">Contraseña (1234)</label>
+                    <input type="password" id="login-pass" placeholder="••••" required>
+                </div>
+                <button type="submit" class="btn btn-primary">Ingresar al Sistema</button>
+                <div id="error-login" style="color:var(--danger); font-size:0.85rem; text-align:center; display:none; font-weight:600;"></div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Modal: Detalles y Ficha del Rollo -->
+    <div id="modal-detalles" class="modal-overlay">
+        <div class="modal-card">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;">
+                <h2 style="margin:0;">Ficha del Rollo</h2>
+                <button class="btn btn-sm btn-outline" id="btn-cerrar-detalles" aria-label="Cerrar modal">
+                    <i class="ph ph-x" aria-hidden="true"></i>
+                </button>
+            </div>
+            <div style="background:#f1f5f9; padding:14px; border-radius:8px; margin-bottom:20px; font-family:monospace; font-size:1.1rem; text-align:center; font-weight:bold; color:var(--primary);">
+                ID: <span id="det-id"></span>
+            </div>
+            <div class="grid-form" style="margin-bottom: 20px;">
+                <div><span style="color:var(--text-muted); font-size:0.8rem;">Tela:</span><br><strong id="det-tela"></strong></div>
+                <div><span style="color:var(--text-muted); font-size:0.8rem;">Color:</span><br><strong id="det-color"></strong></div>
+                <div><span style="color:var(--text-muted); font-size:0.8rem;">Metros:</span><br><strong id="det-metros"></strong> m</div>
+                <div><span style="color:var(--text-muted); font-size:0.8rem;">Peso:</span><br><strong id="det-peso"></strong> kg</div>
+                <div><span style="color:var(--text-muted); font-size:0.8rem;">Bodega:</span><br><strong id="det-bodega"></strong></div>
+                <div><span style="color:var(--text-muted); font-size:0.8rem;">Fecha Ingreso:</span><br><span id="det-fecha" style="font-size:0.85rem;"></span></div>
+            </div>
+            <div style="display:flex; flex-direction:column; gap:10px;">
+                <button class="btn btn-outline" id="btn-reimprimir">
+                    <i class="ph ph-printer" aria-hidden="true"></i> Reimprimir Etiqueta QR
+                </button>
+                <button class="btn btn-danger" id="btn-salida">
+                    <i class="ph ph-sign-out" aria-hidden="true"></i> Registrar Salida
+                </button>
+                <div id="admin-actions" style="display:none; flex-direction:column; gap:10px; margin-top:10px; padding-top:10px; border-top:1px solid var(--border);">
+                    <button class="btn btn-warning" id="btn-editar-admin">
+                        <i class="ph ph-pencil-simple" aria-hidden="true"></i> Editar Rollo (Admin)
+                    </button>
+                    <button class="btn btn-outline" style="color:var(--danger); border-color:var(--danger);" id="btn-eliminar-admin">
+                        <i class="ph ph-trash" aria-hidden="true"></i> Eliminar Rollo (Admin)
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal: Edición (Sólo Admin) -->
+    <div id="modal-editar" class="modal-overlay">
+        <div class="modal-card">
+            <h2 style="margin-top:0;">Editar Rollo <span id="edit-id-display" style="font-size:0.9rem; color:var(--primary);"></span></h2>
+            <form id="form-editar" class="grid-form">
+                <div class="input-group">
+                    <label for="edit-nombre">Tipo de Tela</label>
+                    <input type="text" id="edit-nombre" required>
+                </div>
+                <div class="input-group">
+                    <label for="edit-color">Color</label>
+                    <input type="text" id="edit-color" required>
+                </div>
+                <div class="input-group">
+                    <label for="edit-metros">Metros</label>
+                    <input type="number" id="edit-metros" step="0.1" min="0.1" required>
+                </div>
+                <div class="input-group">
+                    <label for="edit-peso">Peso (Kg)</label>
+                    <input type="number" id="edit-peso" step="0.1" min="0.1" required>
+                </div>
+                <div style="grid-column:1/-1; display:flex; gap:10px; margin-top:15px;">
+                    <button type="button" class="btn btn-outline" style="flex:1;" id="btn-cancelar-edicion">Cancelar</button>
+                    <button type="submit" class="btn btn-warning" style="flex:1;">Guardar Cambios</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Toast Notifications Container -->
+    <div id="toast-container" class="toast-container" aria-live="polite"></div>
+
+    <!-- Frame Oculto para Impresión de Etiquetas QR -->
+    <iframe id="print-frame" title="Impresión de Etiqueta QR"></iframe>
+
+    <!-- 🚀 Lógica App JavaScript -->
+    <script src="js/app.js"></script>
+</body>
+</html>
