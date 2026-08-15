@@ -6,7 +6,7 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 
 app.use(cors());
-app.use(express.json());
+app.use(express.json({ limit: '10mb' }));
 
 // Servir archivos estáticos de la carpeta public
 app.use(express.static(path.join(__dirname, 'public')));
@@ -22,25 +22,78 @@ let bitacora = [
     { fecha: new Date().toLocaleString(), usuario: 'Sistema', accion: 'Inicialización', bodega: '-', detalle: 'Servidor Express WMS iniciado.' }
 ];
 
-// Rutas de API REST
+// Middleware de manejo de errores global
+const handleError = (err, res) => {
+    console.error('Error en servidor:', err);
+    res.status(500).json({ status: 'error', message: 'Error interno del servidor' });
+};
+
+// Rutas de API REST con validación
 app.get('/api/productos', (req, res) => {
-    res.json(inventario);
+    try {
+        if (!Array.isArray(inventario)) {
+            throw new Error('Inventario no es un array válido');
+        }
+        res.json(inventario);
+    } catch (err) {
+        handleError(err, res);
+    }
 });
 
 app.get('/api/bitacora', (req, res) => {
-    res.json(bitacora);
+    try {
+        if (!Array.isArray(bitacora)) {
+            throw new Error('Bitácora no es un array válido');
+        }
+        res.json(bitacora);
+    } catch (err) {
+        handleError(err, res);
+    }
 });
 
 app.post('/api/sincronizar', (req, res) => {
-    const { inventario: inv, bitacora: bit } = req.body;
-    if (Array.isArray(inv)) inventario = inv;
-    if (Array.isArray(bit)) bitacora = bit;
-    res.json({ status: 'ok', message: 'Datos sincronizados correctamente.' });
+    try {
+        const { inventario: inv, bitacora: bit } = req.body;
+
+        // Validar que los datos sean arrays
+        if (!Array.isArray(inv) || !Array.isArray(bit)) {
+            return res.status(400).json({ 
+                status: 'error', 
+                message: 'Inventario y bitácora deben ser arrays válidos' 
+            });
+        }
+
+        // Validar que los registros tengan los campos mínimos requeridos
+        const inventarioValido = inv.every(item => 
+            item.id && item.tela && typeof item.metros === 'number' && typeof item.peso === 'number'
+        );
+        
+        if (!inventarioValido) {
+            return res.status(400).json({ 
+                status: 'error', 
+                message: 'Algunos registros del inventario son inválidos' 
+            });
+        }
+
+        // Actualizar datos si son válidos
+        inventario = inv;
+        bitacora = bit;
+        
+        console.log('✅ Datos sincronizados correctamente. Inventario:', inv.length, 'Bitácora:', bit.length);
+        res.json({ status: 'ok', message: 'Datos sincronizados correctamente.' });
+    } catch (err) {
+        handleError(err, res);
+    }
 });
 
 // Fallback SPA
 app.get('*', (req, res) => {
     res.sendFile(path.join(__dirname, 'public', 'index.html'));
+});
+
+// Manejo de errores 404
+app.use((req, res) => {
+    res.status(404).json({ status: 'error', message: 'Ruta no encontrada' });
 });
 
 app.listen(PORT, () => {

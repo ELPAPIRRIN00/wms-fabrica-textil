@@ -61,16 +61,18 @@
                 try {
                     const resProductos = await fetch('/api/productos');
                     if (resProductos.ok) {
-                        this.inventario = await resProductos.json();
+                        const data = await resProductos.json();
+                        if (Array.isArray(data)) this.inventario = data;
                     }
                     const resBitacora = await fetch('/api/bitacora');
                     if (resBitacora.ok) {
-                        this.bitacora = await resBitacora.json();
+                        const data = await resBitacora.json();
+                        if (Array.isArray(data)) this.bitacora = data;
                     }
                     this.poblarSelectorTelasExistentes();
                     return;
                 } catch (err) {
-                    console.warn('Error cargando desde Backend, recurriendo a localStorage:', err);
+                    console.warn('⚠️ Error cargando desde Backend, recurriendo a localStorage:', err);
                 }
             }
 
@@ -79,7 +81,12 @@
                 const rawBit = localStorage.getItem('ham_bitacora');
                 this.inventario = rawInv !== null ? JSON.parse(rawInv) : this.getInventarioDemo();
                 this.bitacora = rawBit !== null ? JSON.parse(rawBit) : [];
+                
+                // Validar que sean arrays
+                if (!Array.isArray(this.inventario)) this.inventario = this.getInventarioDemo();
+                if (!Array.isArray(this.bitacora)) this.bitacora = [];
             } catch (e) {
+                console.error('Error parsing localStorage data:', e);
                 this.inventario = this.getInventarioDemo();
                 this.bitacora = [];
             }
@@ -371,7 +378,7 @@
                 trGrupo.innerHTML = `
                     <td colspan="7">
                         <i class="ph ph-caret-down"></i> <strong>${tela}</strong> 
-                        <span style="margin-left: 10px; font-weight:normal; font-size:0.8rem; color:#475569;">
+                        <span style="margin-left: 10px; font-weight:normal; font-size:0.8rem; color:var(--text-secondary);">
                             (${piezas.length} piezas físicas | Stock: ${totalMetros} m | ${totalPeso} kg)
                         </span>
                     </td>
@@ -387,11 +394,11 @@
                     tr.dataset.id = pieza.id;
                     tr.innerHTML = `
                         <td style="font-family:monospace; color:var(--primary); font-weight:600;">${pieza.id}</td>
-                        <td><span class="badge" style="background:#f1f5f9; color:#334155; border:1px solid #cbd5e1;">${presentacion}</span></td>
-                        <td>${pieza.color}</td>
+                        <td><span class="badge" style="background:var(--accent-dim); color:var(--accent); border:1px solid rgba(245,158,11,0.2);">${presentacion}</span></td>
+                        <td style="color:var(--text-secondary);">${pieza.color}</td>
                         <td style="font-size:0.8rem; color:var(--text-muted);">${composicion}</td>
-                        <td><strong>${pieza.metros} m</strong></td>
-                        <td>${pieza.peso} kg</td>
+                        <td><strong style="color:var(--primary);">${pieza.metros} m</strong></td>
+                        <td style="color:var(--text-secondary);">${pieza.peso} kg</td>
                         <td><span class="badge badge-b${pieza.bodega}">Bodega ${pieza.bodega}</span></td>
                     `;
                     tbody.appendChild(tr);
@@ -414,10 +421,10 @@
                     tr.dataset.id = r.id;
                     tr.innerHTML = `
                         <td style="font-family:monospace; color:var(--primary); font-weight:600;">${r.id}</td>
-                        <td>${r.tela}</td>
-                        <td><span class="badge" style="background:#f1f5f9; color:#334155;">${r.presentacion || 'Rollo'}</span></td>
+                        <td style="color:var(--text-secondary);">${r.tela}</td>
+                        <td><span class="badge" style="background:var(--accent-dim); color:var(--accent); border:1px solid rgba(245,158,11,0.2);">${r.presentacion || 'Rollo'}</span></td>
                         <td><span class="badge badge-b${r.bodega}">Bodega ${r.bodega}</span></td>
-                        <td><strong>${r.metros} m</strong></td>
+                        <td><strong style="color:var(--primary);">${r.metros} m</strong></td>
                     `;
                     tbody.appendChild(tr);
                 });
@@ -450,17 +457,28 @@
                         labels: ['Bodega 1', 'Bodega 2'],
                         datasets: [{
                             data: [mB1, mB2],
-                            backgroundColor: ['#2563eb', '#ec4899'],
-                            borderWidth: 0
+                            backgroundColor: ['#3b82f6', '#c084fc'],
+                            hoverBackgroundColor: ['#60a5fa', '#d8b4fe'],
+                            borderWidth: 2,
+                            borderColor: '#111827'
                         }]
                     },
                     options: {
                         responsive: true,
                         maintainAspectRatio: false,
                         plugins: {
-                            legend: { position: 'bottom' }
+                            legend: {
+                                position: 'bottom',
+                                labels: {
+                                    color: '#94a3b8',
+                                    font: { family: 'Inter', weight: '600', size: 12 },
+                                    padding: 20,
+                                    usePointStyle: true,
+                                    pointStyleWidth: 12
+                                }
+                            }
                         },
-                        cutout: '65%'
+                        cutout: '68%'
                     }
                 });
             }
@@ -473,11 +491,11 @@
             this.bitacora.forEach(b => {
                 const tr = document.createElement('tr');
                 tr.innerHTML = `
-                    <td style="font-size:0.8rem; color:var(--text-muted);">${b.fecha}</td>
-                    <td><strong>${b.usuario}</strong></td>
-                    <td style="color:var(--primary); font-weight:600;">${b.accion}</td>
-                    <td>${b.bodega === '-' ? '-' : 'Bodega ' + b.bodega}</td>
-                    <td>${b.detalle}</td>
+                    <td style="font-size:0.8rem; color:var(--text-muted); font-family:monospace;">${b.fecha}</td>
+                    <td><strong style="color:var(--text-primary);">${b.usuario}</strong></td>
+                    <td style="color:var(--primary); font-weight:700;">${b.accion}</td>
+                    <td style="color:var(--text-secondary);">${b.bodega === '-' ? '-' : 'Bodega ' + b.bodega}</td>
+                    <td style="color:var(--text-secondary);">${b.detalle}</td>
                 `;
                 tbody.appendChild(tr);
             });
@@ -502,8 +520,29 @@
             const metros = parseFloat(document.getElementById('reg-metros').value);
             const peso = parseFloat(document.getElementById('reg-peso').value);
 
-            if (!nombre || !presentacion || !composicion || !color || isNaN(metros) || isNaN(peso) || metros <= 0 || peso <= 0) {
-                this.mostrarToast('Por favor completa todos los campos con datos válidos.', 'error');
+            // Validaciones exhaustivas
+            if (!nombre) {
+                this.mostrarToast('❌ El nombre de la tela es requerido.', 'error');
+                return;
+            }
+            if (!presentacion) {
+                this.mostrarToast('❌ Selecciona un tipo de empaque.', 'error');
+                return;
+            }
+            if (!composicion) {
+                this.mostrarToast('❌ La composición es requerida.', 'error');
+                return;
+            }
+            if (!color) {
+                this.mostrarToast('❌ El color es requerido.', 'error');
+                return;
+            }
+            if (isNaN(metros) || metros <= 0) {
+                this.mostrarToast('❌ Los metros deben ser un número válido mayor a 0.', 'error');
+                return;
+            }
+            if (isNaN(peso) || peso <= 0) {
+                this.mostrarToast('❌ El peso debe ser un número válido mayor a 0.', 'error');
                 return;
             }
 
@@ -665,14 +704,37 @@
 
         async guardarEdicion(e) {
             e.preventDefault();
-            if (!this.rolloSeleccionado) return;
+            if (!this.rolloSeleccionado) {
+                this.mostrarToast('Error: No hay producto seleccionado.', 'error');
+                return;
+            }
 
-            this.rolloSeleccionado.tela = document.getElementById('edit-nombre').value.trim();
-            this.rolloSeleccionado.presentacion = document.getElementById('edit-presentacion').value;
-            this.rolloSeleccionado.composicion = document.getElementById('edit-composicion').value.trim();
-            this.rolloSeleccionado.color = document.getElementById('edit-color').value.trim();
-            this.rolloSeleccionado.metros = parseFloat(document.getElementById('edit-metros').value);
-            this.rolloSeleccionado.peso = parseFloat(document.getElementById('edit-peso').value);
+            const nombre = document.getElementById('edit-nombre').value.trim();
+            const presentacion = document.getElementById('edit-presentacion').value;
+            const composicion = document.getElementById('edit-composicion').value.trim();
+            const color = document.getElementById('edit-color').value.trim();
+            const metros = parseFloat(document.getElementById('edit-metros').value);
+            const peso = parseFloat(document.getElementById('edit-peso').value);
+
+            if (!nombre || !presentacion || !composicion || !color) {
+                this.mostrarToast('Todos los campos de texto son requeridos.', 'error');
+                return;
+            }
+            if (isNaN(metros) || metros <= 0) {
+                this.mostrarToast('Los metros deben ser un número válido mayor a 0.', 'error');
+                return;
+            }
+            if (isNaN(peso) || peso <= 0) {
+                this.mostrarToast('El peso debe ser un número válido mayor a 0.', 'error');
+                return;
+            }
+
+            this.rolloSeleccionado.tela = nombre;
+            this.rolloSeleccionado.presentacion = presentacion;
+            this.rolloSeleccionado.composicion = composicion;
+            this.rolloSeleccionado.color = color;
+            this.rolloSeleccionado.metros = metros;
+            this.rolloSeleccionado.peso = peso;
 
             this.registrarMovimiento('EDICIÓN', this.rolloSeleccionado.bodega, `Administrador modificó ${this.rolloSeleccionado.id}`);
             await this.guardarDatos();
@@ -790,46 +852,52 @@
             if (!container) return;
 
             const traducirTextos = () => {
-                const btnPermission = container.querySelector('#html5-qrcode-button-camera-permission');
-                if (btnPermission && btnPermission.textContent.includes('Request Camera Permissions')) {
-                    btnPermission.textContent = '🎥 Solicitar Permiso para Usar la Cámara';
-                }
+                try {
+                    const btnPermission = container.querySelector('#html5-qrcode-button-camera-permission');
+                    if (btnPermission?.textContent?.includes('Request Camera Permissions')) {
+                        btnPermission.textContent = '🎥 Solicitar Permiso para Usar la Cámara';
+                    }
 
-                const btnStart = container.querySelector('#html5-qrcode-button-camera-start');
-                if (btnStart && btnStart.textContent.includes('Start Scanning')) {
-                    btnStart.textContent = '▶️ Iniciar Escáner de Cámara';
-                }
+                    const btnStart = container.querySelector('#html5-qrcode-button-camera-start');
+                    if (btnStart?.textContent?.includes('Start Scanning')) {
+                        btnStart.textContent = '▶️ Iniciar Escáner de Cámara';
+                    }
 
-                const btnStop = container.querySelector('#html5-qrcode-button-camera-stop');
-                if (btnStop && btnStop.textContent.includes('Stop Scanning')) {
-                    btnStop.textContent = '⏹️ Detener Escáner';
-                }
+                    const btnStop = container.querySelector('#html5-qrcode-button-camera-stop');
+                    if (btnStop?.textContent?.includes('Stop Scanning')) {
+                        btnStop.textContent = '⏹️ Detener Escáner';
+                    }
 
-                const selectCamera = container.querySelector('#html5-qrcode-select-camera');
-                if (selectCamera && selectCamera.previousSibling && selectCamera.previousSibling.textContent) {
-                    if (selectCamera.previousSibling.textContent.includes('Select Camera')) {
+                    const selectCamera = container.querySelector('#html5-qrcode-select-camera');
+                    if (selectCamera?.previousSibling?.textContent?.includes('Select Camera')) {
                         selectCamera.previousSibling.textContent = 'Seleccionar Cámara: ';
                     }
-                }
 
-                const anchorType = container.querySelector('#html5-qrcode-anchor-scan-type-change');
-                if (anchorType) {
-                    if (anchorType.textContent.includes('Scan an Image File')) {
-                        anchorType.textContent = '📁 Subir o escanear una imagen con código QR';
-                    } else if (anchorType.textContent.includes('Scan using camera directly')) {
-                        anchorType.textContent = '📷 Usar la cámara directamente';
+                    const anchorType = container.querySelector('#html5-qrcode-anchor-scan-type-change');
+                    if (anchorType?.textContent) {
+                        if (anchorType.textContent.includes('Scan an Image File')) {
+                            anchorType.textContent = '📁 Subir o escanear una imagen con código QR';
+                        } else if (anchorType.textContent.includes('Scan using camera directly')) {
+                            anchorType.textContent = '📷 Usar la cámara directamente';
+                        }
                     }
-                }
 
-                const fileInputLabel = container.querySelector('#html5-qrcode-button-file-selection');
-                if (fileInputLabel && fileInputLabel.textContent.includes('Choose Image')) {
-                    fileInputLabel.textContent = '🖼️ Seleccionar Imagen de QR';
+                    const fileInputLabel = container.querySelector('#html5-qrcode-button-file-selection');
+                    if (fileInputLabel?.textContent?.includes('Choose Image')) {
+                        fileInputLabel.textContent = '🖼️ Seleccionar Imagen de QR';
+                    }
+                } catch (err) {
+                    console.warn('Error al traducir elementos del escáner:', err);
                 }
             };
 
             traducirTextos();
-            const observer = new MutationObserver(traducirTextos);
-            observer.observe(container, { childList: true, subtree: true });
+            try {
+                const observer = new MutationObserver(traducirTextos);
+                observer.observe(container, { childList: true, subtree: true });
+            } catch (err) {
+                console.warn('Error al crear observer del escáner:', err);
+            }
         },
 
         async detenerScanner() {
@@ -848,63 +916,79 @@
 
         /* ---------- Impresión de Etiquetas QR ---------- */
         imprimirQR() {
-            if (!this.rolloSeleccionado) return;
+            if (!this.rolloSeleccionado) {
+                this.mostrarToast('No hay producto seleccionado para imprimir.', 'error');
+                return;
+            }
 
             const iframe = document.getElementById('print-frame');
-            if (!iframe) return;
+            if (!iframe) {
+                this.mostrarToast('Error: No se encontró el frame de impresión.', 'error');
+                return;
+            }
 
-            const doc = iframe.contentDocument || iframe.contentWindow.document;
-            doc.open();
-            doc.write(`
-                <!DOCTYPE html>
-                <html lang="es">
-                <head>
-                    <meta charset="UTF-8">
-                    <title>Etiqueta QR - ${this.rolloSeleccionado.id}</title>
-                    <style>
-                        body { margin: 1cm; font-family: system-ui, -apple-system, sans-serif; text-align: center; color: #000; }
-                        .etiqueta { border: 2px dashed #000; padding: 20px; width: 85mm; margin: auto; border-radius: 8px; }
-                        h3 { margin: 0 0 5px 0; font-size: 14pt; font-weight: 800; text-transform: uppercase; }
-                        .badge-type { display: inline-block; font-size: 9pt; font-weight: bold; background: #e2e8f0; padding: 2px 8px; border-radius: 4px; margin-bottom: 8px; }
-                        p { margin: 4px 0; font-size: 10pt; }
-                        .qr-box { margin: 15px auto; display: flex; justify-content: center; align-items: center; background: #fff; padding: 10px; border-radius: 6px; }
-                        .qr-box img, .qr-box canvas { display: block; margin: 0 auto; }
-                        .code-id { font-family: monospace; font-size: 13pt; font-weight: bold; margin-top: 8px; }
-                        .empresa { font-size: 8pt; font-weight: bold; margin-top: 12px; border-top: 1px solid #000; padding-top: 6px; text-transform: uppercase; letter-spacing: 0.5px; }
-                    </style>
-                    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
-                </head>
-                <body>
-                    <div class="etiqueta">
-                        <h3>${this.rolloSeleccionado.tela}</h3>
-                        <div class="badge-type">Empaque: ${this.rolloSeleccionado.presentacion || 'Rollo'}</div>
-                        <p><strong>Composición:</strong> ${this.rolloSeleccionado.composicion || 'N/A'}</p>
-                        <p><strong>Color:</strong> ${this.rolloSeleccionado.color}</p>
-                        <p><strong>Metros:</strong> ${this.rolloSeleccionado.metros} m | <strong>Peso:</strong> ${this.rolloSeleccionado.peso} kg</p>
-                        <div id="qr-temp" class="qr-box"></div>
-                        <div class="code-id">${this.rolloSeleccionado.id}</div>
-                        <div class="empresa">H.A.M. Poo - Sistema WMS Textil</div>
-                    </div>
-                    <script>
-                        window.onload = function() {
-                            new QRCode(document.getElementById('qr-temp'), {
-                                text: "${this.rolloSeleccionado.id}",
-                                width: 140,
-                                height: 140,
-                                colorDark: "#000000",
-                                colorLight: "#ffffff",
-                                correctLevel: QRCode.CorrectLevel.H
-                            });
-                            setTimeout(function() {
-                                window.focus();
-                                window.print();
-                            }, 250);
-                        };
-                    </script>
-                </body>
-                </html>
-            `);
-            doc.close();
+            try {
+                const doc = iframe.contentDocument || iframe.contentWindow.document;
+                doc.open();
+                doc.write(`
+                    <!DOCTYPE html>
+                    <html lang="es">
+                    <head>
+                        <meta charset="UTF-8">
+                        <title>Etiqueta QR - ${this.rolloSeleccionado.id}</title>
+                        <style>
+                            body { margin: 1cm; font-family: system-ui, -apple-system, sans-serif; text-align: center; color: #000; }
+                            .etiqueta { border: 2px dashed #000; padding: 20px; width: 85mm; margin: auto; border-radius: 8px; }
+                            h3 { margin: 0 0 5px 0; font-size: 14pt; font-weight: 800; text-transform: uppercase; }
+                            .badge-type { display: inline-block; font-size: 9pt; font-weight: bold; background: #e2e8f0; padding: 2px 8px; border-radius: 4px; margin-bottom: 8px; }
+                            p { margin: 4px 0; font-size: 10pt; }
+                            .qr-box { margin: 15px auto; display: flex; justify-content: center; align-items: center; background: #fff; padding: 10px; border-radius: 6px; }
+                            .qr-box img, .qr-box canvas { display: block; margin: 0 auto; }
+                            .code-id { font-family: monospace; font-size: 13pt; font-weight: bold; margin-top: 8px; }
+                            .empresa { font-size: 8pt; font-weight: bold; margin-top: 12px; border-top: 1px solid #000; padding-top: 6px; text-transform: uppercase; letter-spacing: 0.5px; }
+                        </style>
+                        <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"><\/script>
+                    </head>
+                    <body>
+                        <div class="etiqueta">
+                            <h3>${this.rolloSeleccionado.tela}</h3>
+                            <div class="badge-type">Empaque: ${this.rolloSeleccionado.presentacion || 'Rollo'}</div>
+                            <p><strong>Composición:</strong> ${this.rolloSeleccionado.composicion || 'N/A'}</p>
+                            <p><strong>Color:</strong> ${this.rolloSeleccionado.color}</p>
+                            <p><strong>Metros:</strong> ${this.rolloSeleccionado.metros} m | <strong>Peso:</strong> ${this.rolloSeleccionado.peso} kg</p>
+                            <div id="qr-temp" class="qr-box"></div>
+                            <div class="code-id">${this.rolloSeleccionado.id}</div>
+                            <div class="empresa">H.A.M. Poo - Sistema WMS Textil</div>
+                        </div>
+                        <script>
+                            window.onload = function() {
+                                try {
+                                    new QRCode(document.getElementById('qr-temp'), {
+                                        text: "${this.rolloSeleccionado.id}",
+                                        width: 140,
+                                        height: 140,
+                                        colorDark: "#000000",
+                                        colorLight: "#ffffff",
+                                        correctLevel: QRCode.CorrectLevel.H
+                                    });
+                                    setTimeout(function() {
+                                        window.focus();
+                                        window.print();
+                                    }, 300);
+                                } catch (e) {
+                                    console.error('Error al generar QR de impresión:', e);
+                                }
+                            };
+                        </script>
+                    </body>
+                    </html>
+                `);
+                doc.close();
+                this.mostrarToast('Abriendo vista previa de impresión...');
+            } catch (err) {
+                console.error('Error en impresión de QR:', err);
+                this.mostrarToast('Error al preparar la impresión.', 'error');
+            }
         },
 
         /* ---------- Exportación a CSV ---------- */
