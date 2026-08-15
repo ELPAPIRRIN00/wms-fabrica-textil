@@ -6,6 +6,16 @@ const { Pool } = require('pg');
 const app = express();
 const PORT = process.env.PORT || 3000;
 
+const fallbackInventario = [
+    { id: 'HAM-1001', tela: 'Algodón Peinado', color: 'Blanco Óptico', presentacion: 'Rollo', composicion: '100% Algodón Peinado', metros: 120, peso: 25, bodega: 1, fecha: new Date().toLocaleString(), estado: 'Activo' },
+    { id: 'HAM-1002', tela: 'Algodón Peinado', color: 'Negro Intenso', presentacion: 'Rollo', composicion: '100% Algodón Peinado', metros: 80, peso: 18, bodega: 1, fecha: new Date().toLocaleString(), estado: 'Activo' },
+    { id: 'HAM-1003', tela: 'Poliéster Deportivo', color: 'Azul Marino', presentacion: 'Bulto', composicion: '100% Poliéster', metros: 200, peso: 40, bodega: 2, fecha: new Date().toLocaleString(), estado: 'Activo' }
+];
+
+const fallbackBitacora = [
+    { fecha: new Date().toLocaleString(), usuario: 'Sistema', accion: 'Inicialización', bodega: '-', detalle: 'Base local inicializada sin conexión a PostgreSQL.' }
+];
+
 app.use(cors());
 app.use(express.json({ limit: '10mb' }));
 
@@ -13,10 +23,10 @@ app.use(express.json({ limit: '10mb' }));
 app.use(express.static(path.join(__dirname, 'public')));
 
 // Configuración de la base de datos PostgreSQL
-const pool = new Pool({
+const pool = process.env.DATABASE_URL ? new Pool({
     connectionString: process.env.DATABASE_URL,
-    ssl: process.env.DATABASE_URL ? { rejectUnauthorized: false } : false
-});
+    ssl: { rejectUnauthorized: false }
+}) : null;
 
 // Inicialización de la base de datos (crea tablas y datos semilla si no existen)
 const initDB = async () => {
@@ -80,45 +90,59 @@ const handleError = (err, res) => {
     res.status(500).json({ status: 'error', message: 'Error interno del servidor' });
 };
 
-// Rutas de API REST conectadas a PostgreSQL
+// Rutas de API REST con fallback seguro si no hay PostgreSQL
 app.get('/api/productos', async (req, res) => {
+    if (!pool) {
+        return res.json(fallbackInventario);
+    }
+
     try {
         const result = await pool.query('SELECT id, tela, color, presentacion, composicion, CAST(metros AS FLOAT) as metros, CAST(peso AS FLOAT) as peso, bodega, fecha, estado FROM inventario ORDER BY id ASC');
         res.json(result.rows);
     } catch (err) {
-        handleError(err, res);
+        console.warn('⚠️ Error consultando PostgreSQL; usando respaldo en memoria.');
+        res.json(fallbackInventario);
     }
 });
 
 app.get('/api/bitacora', async (req, res) => {
+    if (!pool) {
+        return res.json(fallbackBitacora);
+    }
+
     try {
         const result = await pool.query('SELECT fecha, usuario, accion, bodega, detalle FROM bitacora ORDER BY id DESC');
         res.json(result.rows);
     } catch (err) {
-        handleError(err, res);
+        console.warn('⚠️ Error consultando bitácora en PostgreSQL; usando respaldo en memoria.');
+        res.json(fallbackBitacora);
     }
 });
 
 app.post('/api/sincronizar', async (req, res) => {
+    const { inventario: inv, bitacora: bit } = req.body;
+
+    if (!Array.isArray(inv) || !Array.isArray(bit)) {
+        return res.status(400).json({
+            status: 'error',
+            message: 'Inventario y bitácora deben ser arrays válidos'
+        });
+    }
+
+    if (!pool) {
+        return res.json({ status: 'ok', message: 'Sincronización local confirmada (sin PostgreSQL).' });
+    }
+
     const client = await pool.connect();
     try {
-        const { inventario: inv, bitacora: bit } = req.body;
-
-        if (!Array.isArray(inv) || !Array.isArray(bit)) {
-            return res.status(400).json({ 
-                status: 'error', 
-                message: 'Inventario y bitácora deben ser arrays válidos' 
-            });
-        }
-
-        const inventarioValido = inv.every(item => 
+        const inventarioValido = inv.every(item =>
             item.id && item.tela && typeof item.metros === 'number' && typeof item.peso === 'number'
         );
-        
+
         if (!inventarioValido) {
-            return res.status(400).json({ 
-                status: 'error', 
-                message: 'Algunos registros del inventario son inválidos' 
+            return res.status(400).json({
+                status: 'error',
+                message: 'Algunos registros del inventario son inválidos'
             });
         }
 

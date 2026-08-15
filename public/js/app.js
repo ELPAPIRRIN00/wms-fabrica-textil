@@ -20,6 +20,10 @@
         inventario: [],
         bitacora: [],
         useBackend: false,
+        cuentas: {
+            admin: { password: '1234', nombre: 'Administrador' },
+            operador: { password: '1234', nombre: 'Operador' }
+        },
 
         /* ---------- Inicialización ---------- */
         async init() {
@@ -172,20 +176,25 @@
             const pass = document.getElementById('login-pass').value.trim();
             const errorEl = document.getElementById('error-login');
 
-            if (pass !== '1234') {
-                errorEl.textContent = 'Contraseña incorrecta (Usa 1234)';
-                errorEl.style.display = 'block';
-                return;
-            }
-            if (user !== 'admin' && user !== 'operador') {
-                errorEl.textContent = 'Usuario no reconocido (Escribe "admin" u "operador")';
+            const cuenta = this.cuentas[user];
+            if (!cuenta) {
+                errorEl.textContent = 'Usuario no reconocido. Usa "admin" u "operador".';
                 errorEl.style.display = 'block';
                 return;
             }
 
+            if (pass !== cuenta.password) {
+                errorEl.textContent = 'Contraseña incorrecta. Usa 1234 para ambos perfiles.';
+                errorEl.style.display = 'block';
+                return;
+            }
+
+            const rol = user === 'admin' ? 'admin' : 'operador';
             localStorage.setItem('ham_user', user);
-            localStorage.setItem('ham_role', user);
-            this.registrarMovimiento('Inicio de Sesión', '-', `Usuario ${user}`);
+            localStorage.setItem('ham_role', rol);
+            this.usuario = user;
+            this.rol = rol;
+            this.registrarMovimiento('Inicio de Sesión', '-', `Usuario ${user} (${cuenta.nombre})`);
             this.verificarSesion();
         },
 
@@ -621,6 +630,14 @@
             if (modalDetalles) modalDetalles.classList.add('active');
         },
 
+        requierePermisoAdmin(mensaje = 'Esta acción requiere permisos de administrador.') {
+            if (this.rol !== 'admin') {
+                this.mostrarToast(mensaje, 'error');
+                return false;
+            }
+            return true;
+        },
+
         descargarQR() {
             if (!this.rolloSeleccionado) return;
             const qrContainer = document.getElementById('modal-qr-preview');
@@ -690,7 +707,10 @@
         },
 
         abrirEdicionAdmin() {
-            if (!this.rolloSeleccionado || this.rol !== 'admin') return;
+            if (!this.rolloSeleccionado) return;
+            if (!this.requierePermisoAdmin('Solo el administrador puede editar piezas.')) {
+                return;
+            }
             document.getElementById('edit-id-display').textContent = `(${this.rolloSeleccionado.id})`;
             document.getElementById('edit-nombre').value = this.rolloSeleccionado.tela;
             document.getElementById('edit-presentacion').value = this.rolloSeleccionado.presentacion || 'Rollo';
@@ -706,6 +726,9 @@
             e.preventDefault();
             if (!this.rolloSeleccionado) {
                 this.mostrarToast('Error: No hay producto seleccionado.', 'error');
+                return;
+            }
+            if (!this.requierePermisoAdmin('Solo el administrador puede guardar cambios a productos.')) {
                 return;
             }
 
@@ -747,7 +770,10 @@
         },
 
         async eliminarRolloAdmin() {
-            if (!this.rolloSeleccionado || this.rol !== 'admin') return;
+            if (!this.rolloSeleccionado) return;
+            if (!this.requierePermisoAdmin('Solo el administrador puede eliminar piezas.')) {
+                return;
+            }
             if (!confirm(`⚠️ ¿Eliminar permanentemente la pieza ${this.rolloSeleccionado.id}?`)) return;
 
             const idEliminado = this.rolloSeleccionado.id;
