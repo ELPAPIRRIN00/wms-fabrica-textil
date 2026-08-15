@@ -224,6 +224,7 @@
                     if (!item) return;
                     const vista = item.dataset.view;
                     if (vista) this.cambiarVista(vista);
+                    this.cerrarMenuMovil();
                 });
             }
 
@@ -231,6 +232,38 @@
             if (btnLogout) {
                 btnLogout.addEventListener('click', () => this.cerrarSesion());
             }
+
+            const btnMenuMobile = document.getElementById('mobile-menu-toggle');
+            const btnUsuarioMobile = document.getElementById('mobile-user-toggle');
+            const backdrop = document.getElementById('mobile-backdrop');
+
+            if (btnMenuMobile) {
+                btnMenuMobile.addEventListener('click', () => {
+                    document.body.classList.toggle('mobile-nav-open');
+                });
+            }
+
+            if (btnUsuarioMobile) {
+                btnUsuarioMobile.addEventListener('click', () => {
+                    const sidebar = document.querySelector('.sidebar');
+                    document.body.classList.add('mobile-nav-open');
+                    if (sidebar) {
+                        sidebar.scrollTop = 0;
+                    }
+                });
+            }
+
+            if (backdrop) {
+                backdrop.addEventListener('click', () => this.cerrarMenuMovil());
+            }
+
+            window.addEventListener('resize', () => {
+                if (window.innerWidth > 768) this.cerrarMenuMovil();
+            });
+        },
+
+        cerrarMenuMovil() {
+            document.body.classList.remove('mobile-nav-open');
         },
 
         async cambiarVista(vista) {

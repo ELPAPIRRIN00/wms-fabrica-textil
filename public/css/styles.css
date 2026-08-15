@@ -847,17 +847,97 @@ canvas {
     }
 }
 
+.mobile-topbar {
+    display: none;
+}
+
+.mobile-backdrop {
+    display: none;
+}
+
 @media (max-width: 768px) {
     body {
         flex-direction: column;
-    }
-    .sidebar {
-        width: 100%;
-        border-right: none;
-        border-bottom: 1px solid var(--border);
+        overflow: auto;
         height: auto;
-        box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+        min-height: 100vh;
     }
+
+    .mobile-topbar {
+        position: sticky;
+        top: 0;
+        z-index: 1400;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        padding: 10px 14px;
+        background: rgba(11, 15, 25, 0.95);
+        border-bottom: 1px solid var(--border);
+        backdrop-filter: blur(12px);
+    }
+
+    .mobile-menu-toggle,
+    .mobile-user-toggle {
+        width: 42px;
+        height: 42px;
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        background: rgba(17, 24, 39, 0.8);
+        color: var(--text-primary);
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 1.15rem;
+        cursor: pointer;
+    }
+
+    .mobile-brand-title {
+        flex: 1;
+        text-align: center;
+        font-size: 0.8rem;
+        font-weight: 800;
+        color: var(--primary);
+        letter-spacing: 0.8px;
+        text-transform: uppercase;
+    }
+
+    .sidebar {
+        position: fixed;
+        left: 0;
+        top: 0;
+        bottom: 0;
+        width: min(82vw, 320px);
+        max-width: 320px;
+        border-right: 1px solid var(--border);
+        border-bottom: none;
+        height: 100vh;
+        box-shadow: 0 20px 50px rgba(0,0,0,0.5);
+        transform: translateX(-110%);
+        transition: transform 0.28s ease;
+        z-index: 1500;
+        background: rgba(17, 24, 39, 0.98);
+    }
+
+    body.mobile-nav-open .sidebar {
+        transform: translateX(0);
+    }
+
+    .mobile-backdrop {
+        position: fixed;
+        inset: 0;
+        background: rgba(2, 6, 23, 0.6);
+        opacity: 0;
+        pointer-events: none;
+        transition: opacity 0.2s ease;
+        z-index: 1400;
+    }
+
+    body.mobile-nav-open .mobile-backdrop {
+        opacity: 1;
+        pointer-events: auto;
+    }
+
     .brand {
         padding: 16px 20px;
         display: flex;
@@ -868,8 +948,8 @@ canvas {
         font-size: 0.65rem;
     }
     .nav-menu {
-        flex-direction: row;
-        overflow-x: auto;
+        flex-direction: column;
+        overflow-y: auto;
         gap: 6px;
         padding: 10px 14px;
         -ms-overflow-style: none;
@@ -880,39 +960,54 @@ canvas {
     }
     .nav-item {
         white-space: nowrap;
-        padding: 10px 14px;
+        padding: 12px 14px;
         font-size: 0.82rem;
     }
     .nav-item span {
-        display: none;
+        display: inline;
     }
     .nav-item i {
-        font-size: 1.5rem;
+        font-size: 1.4rem;
     }
     .nav-item.active::before {
-        display: none;
+        display: block;
     }
     .user-profile {
-        display: none;
+        display: flex;
+        flex-direction: column;
+        align-items: stretch;
+        padding: 12px 16px 16px;
+        border-top: 1px solid var(--border);
+    }
+    .user-profile strong {
+        margin-bottom: 8px;
+        font-size: 0.76rem;
+        word-break: break-word;
     }
     .main-content {
         padding: 16px;
         height: auto;
+        min-height: 60vh;
     }
     .header h2 {
         font-size: 1.2rem;
     }
+
     .modal-card {
         padding: 22px;
-        width: 96%;
+        width: min(92vw, 520px);
         max-height: 88vh;
     }
+
     .grid-form {
         grid-template-columns: 1fr;
     }
 }
 
 @media (max-width: 480px) {
+    .mobile-brand-title {
+        font-size: 0.72rem;
+    }
     .main-content {
         padding: 12px;
     }
@@ -922,6 +1017,10 @@ canvas {
     }
     .header h2 {
         font-size: 1.05rem;
+    }
+    .modal-card {
+        padding: 18px 16px;
+        width: min(94vw, 480px);
     }
     table {
         font-size: 0.78rem;
