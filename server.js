@@ -6,40 +6,40 @@ const { Pool } = require('pg');
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-const fallbackInventario = [
-    { id: 'HAM-1001', tela: 'Algodón Peinado', color: 'Blanco Óptico', presentacion: 'Rollo', composicion: '100% Algodón Peinado', metros: 120, peso: 25, bodega: 1, fecha: new Date().toLocaleString(), estado: 'Activo' },
-    { id: 'HAM-1002', tela: 'Algodón Peinado', color: 'Negro Intenso', presentacion: 'Rollo', composicion: '100% Algodón Peinado', metros: 80, peso: 18, bodega: 1, fecha: new Date().toLocaleString(), estado: 'Activo' },
-    { id: 'HAM-1003', tela: 'Poliéster Deportivo', color: 'Azul Marino', presentacion: 'Bulto', composicion: '100% Poliéster', metros: 200, peso: 40, bodega: 2, fecha: new Date().toLocaleString(), estado: 'Activo' }
-];
-
-const fallbackBitacora = [
-    { fecha: new Date().toLocaleString(), usuario: 'Sistema', accion: 'Inicialización', bodega: '-', detalle: 'Base local inicializada sin conexión a PostgreSQL.' }
-];
-
+// Configuración de Express
 app.use(cors());
 app.use(express.json({ limit: '10mb' }));
-
-// Servir archivos estáticos de la carpeta public
 app.use(express.static(path.join(__dirname, 'public')));
 
-// Configuración de la base de datos PostgreSQL
-const pool = process.env.DATABASE_URL ? new Pool({
-    connectionString: process.env.DATABASE_URL,
-    ssl: { rejectUnauthorized: false }
-}) : null;
+// Datos iniciales de respaldo (Fallback local si no hay DB activa)
+let fallbackInventario = [
+    { id: 'HAM-1001', nombre_producto: 'Toalla Facial Hilaza', medidas: '40x70', stock_pz: 120, color: 'Blanco Óptico', composicion: '100% Algodón', tipo: 'ROLLO', bodega: 1, fecha: new Date().toLocaleString(), estado: 'Activo' },
+    { id: 'HAM-1002', nombre_producto: 'Sabana Algodón Peinado', medidas: '160x200', stock_pz: 80, color: 'Negro Intenso', composicion: '100% Algodón Peinado', tipo: 'PAQUETE', bodega: 1, fecha: new Date().toLocaleString(), estado: 'Activo' },
+    { id: 'HAM-1003', nombre_producto: 'Tela Poliéster Deportivo', medidas: '150x300', stock_pz: 200, color: 'Azul Marino', composicion: '100% Poliéster', tipo: 'BULTO', bodega: 2, fecha: new Date().toLocaleString(), estado: 'Activo' }
+];
 
-// Inicialización de la base de datos (crea tablas y datos semilla si no existen)
+let fallbackBitacora = [
+    { id: 1, fecha: new Date().toLocaleString(), usuario: 'Sistema', accion: 'Inicialización', bodega: '-', detalle: 'Servidor WMS iniciado.' }
+];
+
+// Pool de conexión a PostgreSQL
+const pool = new Pool({
+    connectionString: process.env.DATABASE_URL,
+    ssl: process.env.DATABASE_URL ? { rejectUnauthorized: false } : false
+});
+
+// Inicialización de la Base de Datos PostgreSQL
 const initDB = async () => {
     try {
         await pool.query(`
             CREATE TABLE IF NOT EXISTS inventario (
                 id VARCHAR(50) PRIMARY KEY,
-                tela VARCHAR(100) NOT NULL,
+                nombre_producto VARCHAR(150) NOT NULL,
+                medidas VARCHAR(50),
+                stock_pz INT DEFAULT 0,
                 color VARCHAR(50),
-                presentacion VARCHAR(50),
                 composicion VARCHAR(100),
-                metros NUMERIC(10,2) DEFAULT 0,
-                peso NUMERIC(10,2) DEFAULT 0,
+                tipo VARCHAR(20) CHECK (tipo IN ('BULTO', 'PAQUETE', 'ROLLO')),
                 bodega INT DEFAULT 1,
                 fecha VARCHAR(100),
                 estado VARCHAR(20) DEFAULT 'Activo'
@@ -57,24 +57,23 @@ const initDB = async () => {
 
         const resInventario = await pool.query('SELECT COUNT(*) FROM inventario');
         if (parseInt(resInventario.rows[0].count, 10) === 0) {
-            await pool.query(`
-                INSERT INTO inventario (id, tela, color, presentacion, composicion, metros, peso, bodega, fecha, estado) 
-                VALUES 
-                ('HAM-1001', 'Algodón Peinado', 'Blanco Óptico', 'Rollo', '100% Algodón Peinado', 120, 25, 1, $1, 'Activo'),
-                ('HAM-1002', 'Algodón Peinado', 'Negro Intenso', 'Rollo', '100% Algodón Peinado', 80, 18, 1, $1, 'Activo'),
-                ('HAM-1003', 'Poliéster Deportivo', 'Azul Marino', 'Bulto', '100% Poliéster', 200, 40, 2, $1, 'Activo');
-            `, [new Date().toLocaleString()]);
+            for (const item of fallbackInventario) {
+                await pool.query(`
+                    INSERT INTO inventario (id, nombre_producto, medidas, stock_pz, color, composicion, tipo, bodega, fecha, estado)
+                    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+                `, [item.id, item.nombre_producto, item.medidas, item.stock_pz, item.color, item.composicion, item.tipo, item.bodega, item.fecha, item.estado]);
+            }
         }
 
         const resBitacora = await pool.query('SELECT COUNT(*) FROM bitacora');
         if (parseInt(resBitacora.rows[0].count, 10) === 0) {
             await pool.query(`
                 INSERT INTO bitacora (fecha, usuario, accion, bodega, detalle)
-                VALUES ($1, 'Sistema', 'Inicialización', '-', 'Base de datos PostgreSQL inicializada.');
+                VALUES ($1, 'Sistema', 'Inicialización', '-', 'Base de datos PostgreSQL inicializada con esquema WMS.')
             `, [new Date().toLocaleString()]);
         }
 
-        console.log('✅ Base de datos verificada e inicializada correctamente.');
+        console.log('✅ Base de datos PostgreSQL estructurada e inicializada correctamente.');
     } catch (err) {
         console.error('❌ Error al inicializar la base de datos:', err.message);
     }
@@ -84,91 +83,171 @@ if (process.env.DATABASE_URL) {
     initDB();
 }
 
-// Middleware de manejo de errores global
+// Manejo centralizado de errores
 const handleError = (err, res) => {
     console.error('Error en servidor:', err);
-    res.status(500).json({ status: 'error', message: 'Error interno del servidor' });
+    res.status(500).json({ status: 'error', message: 'Error interno en el servidor WMS' });
 };
 
-// Rutas de API REST con fallback seguro si no hay PostgreSQL
+/* =========================================================
+ * 🛠️ RUTAS DE LA API REST
+ * ========================================================= */
+
+// 1. Obtener todos los productos del inventario
 app.get('/api/productos', async (req, res) => {
-    if (!pool) {
-        return res.json(fallbackInventario);
-    }
-
     try {
-        const result = await pool.query('SELECT id, tela, color, presentacion, composicion, CAST(metros AS FLOAT) as metros, CAST(peso AS FLOAT) as peso, bodega, fecha, estado FROM inventario ORDER BY id ASC');
-        res.json(result.rows);
-    } catch (err) {
-        console.warn('⚠️ Error consultando PostgreSQL; usando respaldo en memoria.');
+        if (process.env.DATABASE_URL) {
+            const result = await pool.query('SELECT * FROM inventario ORDER BY fecha DESC');
+            return res.json(result.rows);
+        }
         res.json(fallbackInventario);
-    }
-});
-
-app.get('/api/bitacora', async (req, res) => {
-    if (!pool) {
-        return res.json(fallbackBitacora);
-    }
-
-    try {
-        const result = await pool.query('SELECT fecha, usuario, accion, bodega, detalle FROM bitacora ORDER BY id DESC');
-        res.json(result.rows);
     } catch (err) {
-        console.warn('⚠️ Error consultando bitácora en PostgreSQL; usando respaldo en memoria.');
-        res.json(fallbackBitacora);
+        handleError(err, res);
     }
 });
 
-app.post('/api/sincronizar', async (req, res) => {
-    const { inventario: inv, bitacora: bit } = req.body;
+// 2. Buscar producto específico por ID (Utilizado por el Escáner QR)
+app.get('/api/productos/:id', async (req, res) => {
+    try {
+        const { id } = req.params;
+        const cleanId = id.trim();
 
-    if (!Array.isArray(inv) || !Array.isArray(bit)) {
-        return res.status(400).json({
-            status: 'error',
-            message: 'Inventario y bitácora deben ser arrays válidos'
-        });
+        if (process.env.DATABASE_URL) {
+            const result = await pool.query('SELECT * FROM inventario WHERE id = $1', [cleanId]);
+            if (result.rows.length === 0) {
+                return res.status(404).json({ status: 'error', message: 'Producto no encontrado o fue eliminado.' });
+            }
+            return res.json(result.rows[0]);
+        } else {
+            const producto = fallbackInventario.find(item => item.id === cleanId);
+            if (!producto) {
+                return res.status(404).json({ status: 'error', message: 'Producto no encontrado en memoria local.' });
+            }
+            return res.json(producto);
+        }
+    } catch (err) {
+        handleError(err, res);
     }
+});
 
-    if (!pool) {
-        return res.json({ status: 'ok', message: 'Sincronización local confirmada (sin PostgreSQL).' });
+// 3. Crear o actualizar un producto individual
+app.post('/api/productos', async (req, res) => {
+    try {
+        const { id, nombre_producto, medidas, stock_pz, color, composicion, tipo, bodega, fecha, estado } = req.body;
+
+        if (!id || !nombre_producto || stock_pz === undefined || !tipo) {
+            return res.status(400).json({ status: 'error', message: 'Faltan campos obligatorios para el producto.' });
+        }
+
+        const fechaReg = fecha || new Date().toLocaleString();
+        const estReg = estado || 'Activo';
+
+        if (process.env.DATABASE_URL) {
+            await pool.query(`
+                INSERT INTO inventario (id, nombre_producto, medidas, stock_pz, color, composicion, tipo, bodega, fecha, estado)
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+                ON CONFLICT (id) DO UPDATE SET
+                    nombre_producto = EXCLUDED.nombre_producto,
+                    medidas = EXCLUDED.medidas,
+                    stock_pz = EXCLUDED.stock_pz,
+                    color = EXCLUDED.color,
+                    composicion = EXCLUDED.composicion,
+                    tipo = EXCLUDED.tipo,
+                    bodega = EXCLUDED.bodega,
+                    fecha = EXCLUDED.fecha,
+                    estado = EXCLUDED.estado
+            `, [id, nombre_producto, medidas, parseInt(stock_pz, 10), color, composicion, tipo, bodega || 1, fechaReg, estReg]);
+        } else {
+            const index = fallbackInventario.findIndex(item => item.id === id);
+            const nuevoObj = { id, nombre_producto, medidas, stock_pz: parseInt(stock_pz, 10), color, composicion, tipo, bodega: bodega || 1, fecha: fechaReg, estado: estReg };
+            if (index >= 0) {
+                fallbackInventario[index] = nuevoObj;
+            } else {
+                fallbackInventario.unshift(nuevoObj);
+            }
+        }
+
+        res.json({ status: 'ok', message: 'Producto guardado correctamente.' });
+    } catch (err) {
+        handleError(err, res);
+    }
+});
+
+// 4. Eliminar producto por ID (Eliminación Física)
+app.delete('/api/productos/:id', async (req, res) => {
+    try {
+        const { id } = req.params;
+        const cleanId = id.trim();
+
+        if (process.env.DATABASE_URL) {
+            const result = await pool.query('DELETE FROM inventario WHERE id = $1 RETURNING *', [cleanId]);
+            if (result.rowCount === 0) {
+                return res.status(404).json({ status: 'error', message: 'El producto a eliminar no existe.' });
+            }
+        } else {
+            const initialLen = fallbackInventario.length;
+            fallbackInventario = fallbackInventario.filter(item => item.id !== cleanId);
+            if (fallbackInventario.length === initialLen) {
+                return res.status(404).json({ status: 'error', message: 'El producto no fue encontrado.' });
+            }
+        }
+
+        res.json({ status: 'ok', message: `Producto ${cleanId} eliminado definitivamente.` });
+    } catch (err) {
+        handleError(err, res);
+    }
+});
+
+// 5. Obtener bitácora
+app.get('/api/bitacora', async (req, res) => {
+    try {
+        if (process.env.DATABASE_URL) {
+            const result = await pool.query('SELECT * FROM bitacora ORDER BY id DESC LIMIT 100');
+            return res.json(result.rows);
+        }
+        res.json(fallbackBitacora);
+    } catch (err) {
+        handleError(err, res);
+    }
+});
+
+// 6. Sincronización completa masiva
+app.post('/api/sincronizar', async (req, res) => {
+    if (!process.env.DATABASE_URL) {
+        const { inventario: inv, bitacora: bit } = req.body;
+        if (Array.isArray(inv)) fallbackInventario = inv;
+        if (Array.isArray(bit)) fallbackBitacora = bit;
+        return res.json({ status: 'ok', message: 'Datos sincronizados en memoria local.' });
     }
 
     const client = await pool.connect();
     try {
-        const inventarioValido = inv.every(item =>
-            item.id && item.tela && typeof item.metros === 'number' && typeof item.peso === 'number'
-        );
-
-        if (!inventarioValido) {
-            return res.status(400).json({
-                status: 'error',
-                message: 'Algunos registros del inventario son inválidos'
-            });
-        }
+        const { inventario: inv, bitacora: bit } = req.body;
 
         await client.query('BEGIN');
-
         await client.query('DELETE FROM inventario');
-        for (const item of inv) {
-            await client.query(
-                `INSERT INTO inventario (id, tela, color, presentacion, composicion, metros, peso, bodega, fecha, estado) 
-                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
-                [item.id, item.tela, item.color, item.presentacion, item.composicion, item.metros, item.peso, item.bodega, item.fecha || new Date().toLocaleString(), item.estado || 'Activo']
-            );
+        
+        if (Array.isArray(inv)) {
+            for (const item of inv) {
+                await client.query(`
+                    INSERT INTO inventario (id, nombre_producto, medidas, stock_pz, color, composicion, tipo, bodega, fecha, estado)
+                    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+                `, [item.id, item.nombre_producto || item.tela, item.medidas || 'N/A', item.stock_pz || item.metros || 0, item.color || '', item.composicion || '', item.tipo || item.presentacion || 'ROLLO', item.bodega || 1, item.fecha || new Date().toLocaleString(), item.estado || 'Activo']);
+            }
         }
 
-        await client.query('DELETE FROM bitacora');
-        for (const item of bit) {
-            await client.query(
-                `INSERT INTO bitacora (fecha, usuario, accion, bodega, detalle) 
-                 VALUES ($1, $2, $3, $4, $5)`,
-                [item.fecha || new Date().toLocaleString(), item.usuario || 'Sistema', item.accion || 'Sincronización', item.bodega || '-', item.detalle || '']
-            );
+        if (Array.isArray(bit)) {
+            await client.query('DELETE FROM bitacora');
+            for (const item of bit) {
+                await client.query(`
+                    INSERT INTO bitacora (fecha, usuario, accion, bodega, detalle)
+                    VALUES ($1, $2, $3, $4, $5)
+                `, [item.fecha || new Date().toLocaleString(), item.usuario || 'Sistema', item.accion || 'Movimiento', item.bodega || '-', item.detalle || '']);
+            }
         }
 
         await client.query('COMMIT');
-        console.log('✅ Datos sincronizados correctamente en la base de datos.');
-        res.json({ status: 'ok', message: 'Datos sincronizados correctamente.' });
+        res.json({ status: 'ok', message: 'Base de datos sincronizada correctamente.' });
     } catch (err) {
         await client.query('ROLLBACK');
         handleError(err, res);
@@ -182,11 +261,7 @@ app.get('*', (req, res) => {
     res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
-// Manejo de errores 404
-app.use((req, res) => {
-    res.status(404).json({ status: 'error', message: 'Ruta no encontrada' });
-});
-
+// Iniciar Servidor
 app.listen(PORT, () => {
-    console.log(`🚀 Servidor WMS Textil H.A.M. Poo en línea: http://localhost:${PORT}`);
+    console.log(`🚀 Servidor WMS Textil H.A.M. Poo en línea en http://localhost:${PORT}`);
 });

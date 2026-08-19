@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta name="description" content="Sistema de Gestión de Almacén (WMS) Textil Industrial — Hilaturas y Acabados Modernos Poo">
+    <meta name="description" content="Sistema de Gestión de Almacén (WMS) Textil Industrial — H.A.M. Poo">
     <meta name="theme-color" content="#0b0f19">
     <title>H.A.M. Poo | WMS Textil Industrial</title>
 
@@ -13,399 +13,420 @@
     <script src="https://unpkg.com/html5-qrcode"></script>
     <script src="https://unpkg.com/@phosphor-icons/web"></script>
     
-    <!-- 🔤 Fuentes Premium -->
+    <!-- 🔤 Fuentes -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
 
-    <!-- 🎨 Dark Industrial UI -->
+    <!-- 🎨 Estilos -->
     <link rel="stylesheet" href="css/styles.css">
 </head>
-<body>
-    <div class="mobile-backdrop" id="mobile-backdrop"></div>
-    <div class="mobile-topbar" aria-label="Acciones rápidas móviles">
-        <button class="mobile-menu-toggle" id="mobile-menu-toggle" type="button" aria-label="Abrir menú">
-            <i class="ph ph-list"></i>
-        </button>
-        <div class="mobile-brand-title">H.A.M. Poo</div>
-        <button class="mobile-user-toggle" id="mobile-user-toggle" type="button" aria-label="Ver usuario">
-            <i class="ph ph-user-circle"></i>
-        </button>
-    </div>
+<body class="dark-theme">
 
-    <!-- ═══════════ SIDEBAR ═══════════ -->
-    <nav class="sidebar" aria-label="Navegación principal">
-        <div class="brand">
-            <h1><i class="ph ph-factory" style="font-size:1.3rem; vertical-align:middle; margin-right:4px;"></i> Hilaturas y Acabados Modernos</h1>
-            <span>_ Poo | Sistema WMS Industrial</span>
-        </div>
-        <div class="nav-menu" id="nav-menu" role="tablist">
-            <button class="nav-item active" data-view="dashboard" role="tab" aria-selected="true">
-                <i class="ph ph-chart-pie-slice" aria-hidden="true"></i> <span>Vista Global</span>
-            </button>
-            <button class="nav-item" data-view="bodega1" role="tab" aria-selected="false">
-                <i class="ph ph-warehouse" aria-hidden="true"></i> <span>Bodega 1</span>
-            </button>
-            <button class="nav-item" data-view="bodega2" role="tab" aria-selected="false">
-                <i class="ph ph-buildings" aria-hidden="true"></i> <span>Bodega 2</span>
-            </button>
-            <button class="nav-item scanner-highlight" data-view="escaner" role="tab" aria-selected="false">
-                <i class="ph ph-qr-code" aria-hidden="true"></i> <span>Escáner Terminal</span>
-            </button>
-            <button class="nav-item" data-view="bitacora" role="tab" aria-selected="false">
-                <i class="ph ph-clock-counter-clockwise" aria-hidden="true"></i> <span>Movimientos</span>
-            </button>
-        </div>
-        <div class="user-profile" id="user-area">
-            <strong id="txt-usuario-activo"><i class="ph ph-user-circle" style="font-size:1rem; vertical-align:middle;"></i> No identificado</strong>
-            <button class="btn btn-sm btn-outline" id="btn-logout" style="width:100%;">
-                <i class="ph ph-sign-out" aria-hidden="true"></i> Cerrar Sesión
-            </button>
-        </div>
-    </nav>
-
-    <!-- ═══════════ MAIN CONTENT ═══════════ -->
-    <main class="main-content">
-
-        <!-- ──── VISTA: DASHBOARD ──── -->
-        <section id="vista-dashboard" class="view-section active" role="tabpanel">
-            <div class="header">
-                <h2><i class="ph ph-chart-pie-slice" aria-hidden="true"></i> Panel de Control Industrial</h2>
-                <button class="btn btn-outline" id="btn-exportar">
-                    <i class="ph ph-file-csv" aria-hidden="true"></i> Exportar CSV
-                </button>
+    <!-- Screen Login Modal -->
+    <div id="login-modal" class="modal-overlay active">
+        <div class="modal-box login-box">
+            <div class="brand-header">
+                <i class="ph ph-factory icon-brand"></i>
+                <h2>WMS H.A.M. Poo</h2>
+                <p>Sistema de Almacén Textil Industrial</p>
             </div>
-            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 22px;">
-                <div class="card">
-                    <h3 class="card-title"><i class="ph ph-chart-donut" aria-hidden="true"></i> Distribución de Stock por Bodega</h3>
-                    <div style="position: relative; height: 260px; width: 100%;">
-                        <canvas id="chartBodegas" aria-label="Gráfica de Metros por Bodega" role="img"></canvas>
-                    </div>
-                </div>
-                <div class="card table-container">
-                    <h3 class="card-title"><i class="ph ph-clock" aria-hidden="true"></i> Últimos Ingresos</h3>
-                    <table>
-                        <thead>
-                            <tr>
-                                <th>ID Pieza</th>
-                                <th>Tela</th>
-                                <th>Empaque</th>
-                                <th>Bodega</th>
-                                <th>Metros</th>
-                            </tr>
-                        </thead>
-                        <tbody id="tabla-ultimos"></tbody>
-                    </table>
-                </div>
-            </div>
-        </section>
-
-        <!-- ──── VISTA: BODEGAS ──── -->
-        <section id="vista-bodegas" class="view-section" role="tabpanel">
-            <div class="header">
-                <h2 id="titulo-bodega"><i class="ph ph-warehouse" aria-hidden="true"></i> Gestión de Bodega</h2>
-                <span id="badge-bodega" class="badge"></span>
-            </div>
-            
-            <!-- FORMULARIO DE INGRESO -->
-            <div class="card">
-                <h3 class="card-title"><i class="ph ph-plus-circle" aria-hidden="true"></i> Entrada de Producto / Incrementar Stock</h3>
-                <form id="form-registro" class="grid-form">
-                    <div class="input-group">
-                        <label for="reg-tela-existente"><i class="ph ph-list-magnifying-glass" style="font-size:0.85rem;"></i> Asignar a Tela Existente</label>
-                        <select id="reg-tela-existente">
-                            <option value="">+ Registrar Nueva Tela...</option>
-                        </select>
-                    </div>
-                    <div class="input-group">
-                        <label for="reg-nombre"><i class="ph ph-tag" style="font-size:0.85rem;"></i> Nombre de Tipo de Tela</label>
-                        <input type="text" id="reg-nombre" placeholder="Ej. Algodón Peinado" required>
-                    </div>
-                    <div class="input-group">
-                        <label for="reg-presentacion"><i class="ph ph-package" style="font-size:0.85rem;"></i> Empaque</label>
-                        <select id="reg-presentacion" required>
-                            <option value="Rollo">🔄 Rollo</option>
-                            <option value="Bulto">📦 Bulto</option>
-                            <option value="Paquete">🎁 Paquete</option>
-                        </select>
-                    </div>
-                    <div class="input-group">
-                        <label for="reg-composicion"><i class="ph ph-flask" style="font-size:0.85rem;"></i> Composición</label>
-                        <input type="text" id="reg-composicion" placeholder="Ej. 100% Algodón Peinado" required>
-                    </div>
-                    <div class="input-group">
-                        <label for="reg-color"><i class="ph ph-paint-bucket" style="font-size:0.85rem;"></i> Color</label>
-                        <input type="text" id="reg-color" placeholder="Ej. Azul Marino" required>
-                    </div>
-                    <div class="input-group">
-                        <label for="reg-metros"><i class="ph ph-ruler" style="font-size:0.85rem;"></i> Metros</label>
-                        <input type="number" id="reg-metros" step="0.1" min="0.1" placeholder="Ej. 100" required>
-                    </div>
-                    <div class="input-group">
-                        <label for="reg-peso"><i class="ph ph-scales" style="font-size:0.85rem;"></i> Peso (Kg)</label>
-                        <input type="number" id="reg-peso" step="0.1" min="0.1" placeholder="Ej. 25" required>
-                    </div>
-                    <div class="input-group" style="justify-content: flex-end; grid-column: 1 / -1;">
-                        <button type="submit" class="btn btn-primary" style="height: 46px; font-size: 0.95rem;">
-                            <i class="ph ph-qr-code" aria-hidden="true"></i> Generar QR e Ingresar Pieza
-                        </button>
-                    </div>
-                </form>
-            </div>
-
-            <!-- INVENTARIO AGRUPADO -->
-            <div class="card">
-                <div class="header" style="margin-bottom: 15px;">
-                    <h3 class="card-title" style="margin:0;"><i class="ph ph-stack" aria-hidden="true"></i> Inventario Agrupado y Stock</h3>
-                    <input type="text" id="buscador-bodega" placeholder="🔍 Buscar por ID, tela, empaque, composición o color..." style="padding: 11px 16px; border-radius: 8px; border: 1px solid var(--border); width: 100%; max-width: 400px; background: rgba(30,41,59,0.6); color: var(--text-primary); font-family: inherit; font-size: 0.85rem; outline: none; transition: var(--transition);">
-                </div>
-                <div class="table-container">
-                    <table>
-                        <thead>
-                            <tr>
-                                <th><i class="ph ph-hash" style="font-size:0.8rem;"></i> ID (QR Único)</th>
-                                <th><i class="ph ph-package" style="font-size:0.8rem;"></i> Empaque</th>
-                                <th><i class="ph ph-paint-bucket" style="font-size:0.8rem;"></i> Color</th>
-                                <th><i class="ph ph-flask" style="font-size:0.8rem;"></i> Composición</th>
-                                <th><i class="ph ph-ruler" style="font-size:0.8rem;"></i> Metros</th>
-                                <th><i class="ph ph-scales" style="font-size:0.8rem;"></i> Peso</th>
-                                <th><i class="ph ph-map-pin" style="font-size:0.8rem;"></i> Estado</th>
-                            </tr>
-                        </thead>
-                        <tbody id="tabla-bodega-activa"></tbody>
-                    </table>
-                </div>
-            </div>
-        </section>
-
-        <!-- ──── VISTA: ESCÁNER TERMINAL ──── -->
-        <section id="vista-escaner" class="view-section" role="tabpanel">
-            <div class="header">
-                <h2><i class="ph ph-qr-code" aria-hidden="true"></i> Terminal de Escaneo Industrial</h2>
-            </div>
-            <div class="card" style="text-align: center;">
-                <p style="color: var(--text-secondary); margin-bottom: 22px; font-size: 0.92rem;">
-                    <i class="ph ph-scan" style="font-size:1.1rem; vertical-align:middle; color:var(--accent);"></i>
-                    Apunta la cámara para escanear piezas (rollos, bultos, paquetes) <strong style="color:var(--primary);">pieza por pieza</strong> para despachar salidas.
-                </p>
-                <div id="scanner-container"></div>
-                
-                <div style="margin-top: 28px; padding-top: 22px; border-top: 1px dashed var(--border);">
-                    <label for="input-qr-file" class="btn btn-outline" style="cursor: pointer;">
-                        <i class="ph ph-image-square" aria-hidden="true"></i> Subir Imagen de Código QR
-                    </label>
-                    <input type="file" id="input-qr-file" accept="image/*" style="display: none;">
-                    <div id="qr-file-result" style="margin-top: 14px; font-weight: 600; font-size: 0.88rem;"></div>
-                </div>
-            </div>
-        </section>
-
-        <!-- ──── VISTA: BITÁCORA ──── -->
-        <section id="vista-bitacora" class="view-section" role="tabpanel">
-            <div class="header">
-                <h2><i class="ph ph-clock-counter-clockwise" aria-hidden="true"></i> Auditoría de Movimientos</h2>
-            </div>
-            <div class="card table-container">
-                <table>
-                    <thead>
-                        <tr>
-                            <th><i class="ph ph-calendar" style="font-size:0.8rem;"></i> Fecha/Hora</th>
-                            <th><i class="ph ph-user" style="font-size:0.8rem;"></i> Usuario</th>
-                            <th><i class="ph ph-lightning" style="font-size:0.8rem;"></i> Operación</th>
-                            <th><i class="ph ph-warehouse" style="font-size:0.8rem;"></i> Bodega</th>
-                            <th><i class="ph ph-note" style="font-size:0.8rem;"></i> Detalle</th>
-                        </tr>
-                    </thead>
-                    <tbody id="tabla-bitacora"></tbody>
-                </table>
-            </div>
-        </section>
-    </main>
-
-    <!-- ═══════════ MODALES ═══════════ -->
-
-    <!-- Modal: Login -->
-    <div id="modal-login" class="modal-overlay active">
-        <div class="modal-card">
-            <div style="text-align:center; margin-bottom: 24px;">
-                <i class="ph ph-factory" style="font-size: 3rem; color: var(--primary); display: block; margin-bottom: 10px; filter: drop-shadow(0 0 12px rgba(6,214,160,0.3));"></i>
-                <h2 style="margin: 0; color: var(--primary); font-size: 1.4rem; font-weight: 900; letter-spacing: -0.5px;">H.A.M. Poo</h2>
-                <p style="color: var(--text-muted); font-size: 0.82rem; margin-top: 6px; letter-spacing: 0.5px;">Acceso al Sistema WMS Textil Industrial</p>
-            </div>
-            <form id="form-login" style="display:flex; flex-direction:column; gap:18px;">
+            <form id="form-login">
                 <div class="input-group">
-                    <label for="login-user"><i class="ph ph-user-circle" style="font-size:0.85rem;"></i> Usuario</label>
-                    <input type="text" id="login-user" placeholder="Ingresa admin u operador" required autocomplete="username">
+                    <label for="login-usuario"><i class="ph ph-user"></i> Usuario</label>
+                    <select id="login-usuario" required>
+                        <option value="admin">Administrador (Acceso Total)</option>
+                        <option value="operador">Operador (Captura y Almacén)</option>
+                    </select>
                 </div>
                 <div class="input-group">
-                    <label for="login-pass"><i class="ph ph-lock-key" style="font-size:0.85rem;"></i> Contraseña</label>
-                    <input type="password" id="login-pass" placeholder="••••" required autocomplete="current-password">
+                    <label for="login-pass"><i class="ph ph-lock-key"></i> Contraseña</label>
+                    <input type="password" id="login-pass" placeholder="••••" required value="1234">
                 </div>
-                <div style="padding: 12px 14px; border-radius: 10px; background: rgba(15, 23, 42, 0.75); border: 1px solid var(--border); color: var(--text-secondary); font-size: 0.8rem; line-height: 1.5;">
-                    <strong style="color: var(--primary);">Credenciales disponibles:</strong><br>
-                    • Admin: usuario <strong>admin</strong> / contraseña <strong>1234</strong><br>
-                    • Operador: usuario <strong>operador</strong> / contraseña <strong>1234</strong>
-                </div>
-                <button type="submit" class="btn btn-primary" style="padding: 14px; font-size: 0.95rem;">
-                    <i class="ph ph-sign-in" aria-hidden="true"></i> Ingresar al Sistema
+                <button type="submit" class="btn btn-primary btn-block">
+                    <i class="ph ph-sign-in"></i> Iniciar Sesión
                 </button>
-                <div id="error-login" style="color:var(--danger); font-size:0.82rem; text-align:center; display:none; font-weight:600; padding: 8px; background: var(--danger-dim); border-radius: 8px;"></div>
             </form>
         </div>
     </div>
 
-    <!-- Modal: Ficha del Producto -->
-    <div id="modal-detalles" class="modal-overlay">
-        <div class="modal-card">
-            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:18px;">
-                <h2 style="margin:0; font-size: 1.2rem; display: flex; align-items: center; gap: 10px;">
-                    <i class="ph ph-identification-card" style="color:var(--primary); font-size:1.5rem;"></i> Ficha del Producto
-                </h2>
-                <button class="btn btn-sm btn-outline" id="btn-cerrar-detalles" aria-label="Cerrar modal">
-                    <i class="ph ph-x" aria-hidden="true"></i>
-                </button>
-            </div>
-
-            <!-- ID prominente -->
-            <div style="background: var(--primary-dim); padding: 14px; border-radius: 10px; margin-bottom: 18px; font-family: monospace; font-size: 1.15rem; text-align: center; font-weight: 800; color: var(--primary); border: 1px solid var(--border-highlight); letter-spacing: 1px;">
-                <i class="ph ph-hash" style="font-size: 1rem;"></i> <span id="det-id"></span>
-            </div>
-
-            <!-- QR Preview -->
-            <div style="text-align: center; margin-bottom: 22px; padding: 18px; background: rgba(30,41,59,0.5); border-radius: 14px; border: 1px solid var(--border);">
-                <div id="modal-qr-preview" style="display: flex; justify-content: center; align-items: center; margin-bottom: 14px;"></div>
-                <button class="btn btn-sm btn-outline" id="btn-descargar-qr">
-                    <i class="ph ph-download-simple" aria-hidden="true"></i> Descargar QR (PNG)
-                </button>
-            </div>
-
-            <!-- Datos del producto -->
-            <div class="grid-form" style="margin-bottom: 22px; gap: 14px;">
-                <div style="background: rgba(30,41,59,0.4); padding: 12px; border-radius: 10px; border: 1px solid var(--border);">
-                    <span style="color: var(--text-muted); font-size: 0.68rem; text-transform: uppercase; letter-spacing: 1px; display: flex; align-items: center; gap: 4px;">
-                        <i class="ph ph-t-shirt" style="font-size:0.8rem;"></i> Tela
-                    </span>
-                    <strong id="det-tela" style="color: var(--text-primary); font-size: 0.95rem;"></strong>
-                </div>
-                <div style="background: rgba(30,41,59,0.4); padding: 12px; border-radius: 10px; border: 1px solid var(--border);">
-                    <span style="color: var(--text-muted); font-size: 0.68rem; text-transform: uppercase; letter-spacing: 1px; display: flex; align-items: center; gap: 4px;">
-                        <i class="ph ph-package" style="font-size:0.8rem;"></i> Empaque
-                    </span>
-                    <strong id="det-presentacion" style="color: var(--accent); font-size: 0.95rem;"></strong>
-                </div>
-                <div style="background: rgba(30,41,59,0.4); padding: 12px; border-radius: 10px; border: 1px solid var(--border);">
-                    <span style="color: var(--text-muted); font-size: 0.68rem; text-transform: uppercase; letter-spacing: 1px; display: flex; align-items: center; gap: 4px;">
-                        <i class="ph ph-flask" style="font-size:0.8rem;"></i> Composición
-                    </span>
-                    <strong id="det-composicion" style="color: var(--text-primary); font-size: 0.95rem;"></strong>
-                </div>
-                <div style="background: rgba(30,41,59,0.4); padding: 12px; border-radius: 10px; border: 1px solid var(--border);">
-                    <span style="color: var(--text-muted); font-size: 0.68rem; text-transform: uppercase; letter-spacing: 1px; display: flex; align-items: center; gap: 4px;">
-                        <i class="ph ph-paint-bucket" style="font-size:0.8rem;"></i> Color
-                    </span>
-                    <strong id="det-color" style="color: var(--text-primary); font-size: 0.95rem;"></strong>
-                </div>
-                <div style="background: rgba(30,41,59,0.4); padding: 12px; border-radius: 10px; border: 1px solid var(--border);">
-                    <span style="color: var(--text-muted); font-size: 0.68rem; text-transform: uppercase; letter-spacing: 1px; display: flex; align-items: center; gap: 4px;">
-                        <i class="ph ph-ruler" style="font-size:0.8rem;"></i> Metros
-                    </span>
-                    <strong id="det-metros" style="color: var(--primary); font-size: 1.1rem;"></strong><span style="color:var(--text-muted); font-size:0.82rem;"> m</span>
-                </div>
-                <div style="background: rgba(30,41,59,0.4); padding: 12px; border-radius: 10px; border: 1px solid var(--border);">
-                    <span style="color: var(--text-muted); font-size: 0.68rem; text-transform: uppercase; letter-spacing: 1px; display: flex; align-items: center; gap: 4px;">
-                        <i class="ph ph-scales" style="font-size:0.8rem;"></i> Peso
-                    </span>
-                    <strong id="det-peso" style="color: var(--text-primary); font-size: 1.1rem;"></strong><span style="color:var(--text-muted); font-size:0.82rem;"> kg</span>
-                </div>
-                <div style="background: rgba(30,41,59,0.4); padding: 12px; border-radius: 10px; border: 1px solid var(--border);">
-                    <span style="color: var(--text-muted); font-size: 0.68rem; text-transform: uppercase; letter-spacing: 1px; display: flex; align-items: center; gap: 4px;">
-                        <i class="ph ph-map-pin" style="font-size:0.8rem;"></i> Bodega
-                    </span>
-                    <strong id="det-bodega" style="color: #60a5fa; font-size: 0.95rem;"></strong>
-                </div>
-                <div style="background: rgba(30,41,59,0.4); padding: 12px; border-radius: 10px; border: 1px solid var(--border);">
-                    <span style="color: var(--text-muted); font-size: 0.68rem; text-transform: uppercase; letter-spacing: 1px; display: flex; align-items: center; gap: 4px;">
-                        <i class="ph ph-calendar" style="font-size:0.8rem;"></i> Ingreso
-                    </span>
-                    <span id="det-fecha" style="font-size: 0.82rem; color: var(--text-secondary);"></span>
+    <!-- App Shell -->
+    <div id="app-shell" class="app-shell hidden">
+        
+        <!-- Sidebar Navigation -->
+        <aside class="sidebar">
+            <div class="sidebar-header">
+                <i class="ph ph-factory logo-icon"></i>
+                <div class="brand-titles">
+                    <h1>H.A.M. POO</h1>
+                    <span>WMS Textil v2.0</span>
                 </div>
             </div>
 
-            <!-- Action buttons -->
-            <div style="display:flex; flex-direction:column; gap:10px;">
-                <button class="btn btn-outline" id="btn-reimprimir">
-                    <i class="ph ph-printer" aria-hidden="true"></i> Reimprimir Etiqueta Formato Térmico
+            <nav class="sidebar-nav">
+                <button class="nav-btn active" data-target="dashboard">
+                    <i class="ph ph-squares-four"></i> <span>Dashboard</span>
                 </button>
-                <button class="btn btn-danger" id="btn-salida" style="padding: 14px 20px; font-size: 1rem;">
-                    <i class="ph ph-sign-out" aria-hidden="true"></i> 📦 Registrar Salida de Producto
+                <button class="nav-btn" data-target="inventario">
+                    <i class="ph ph-package"></i> <span>Inventario</span>
                 </button>
-                <div id="admin-actions" style="display:none; flex-direction:column; gap:10px; margin-top:12px; padding-top:12px; border-top:1px solid var(--border);">
-                    <button class="btn btn-warning" id="btn-editar-admin">
-                        <i class="ph ph-pencil-simple" aria-hidden="true"></i> Editar Producto (Admin)
-                    </button>
-                    <button class="btn btn-outline" style="color:var(--danger); border-color:rgba(239,68,68,0.3);" id="btn-eliminar-admin">
-                        <i class="ph ph-trash" aria-hidden="true"></i> Eliminar Producto (Admin)
-                    </button>
+                <button class="nav-btn" data-target="registro">
+                    <i class="ph ph-plus-circle"></i> <span>Ingreso (Reg. QR)</span>
+                </button>
+                <button class="nav-btn" data-target="escaner">
+                    <i class="ph ph-qr-code"></i> <span>Escáner QR</span>
+                </button>
+                <button class="nav-btn" data-target="bitacora">
+                    <i class="ph ph-receipt"></i> <span>Bitácora</span>
+                </button>
+            </nav>
+
+            <div class="sidebar-footer">
+                <div class="user-info">
+                    <i class="ph ph-user-circle"></i>
+                    <div>
+                        <strong id="user-display-name">Usuario</strong>
+                        <span id="user-display-role" class="badge">Rol</span>
+                    </div>
                 </div>
+                <button id="btn-logout" class="btn-icon danger" title="Cerrar Sesión">
+                    <i class="ph ph-sign-out"></i>
+                </button>
             </div>
-        </div>
+        </aside>
+
+        <!-- Main Content Area -->
+        <main class="main-content">
+            
+            <!-- Top Bar -->
+            <header class="topbar">
+                <div class="bodega-selector">
+                    <label for="select-bodega"><i class="ph ph-warehouse"></i> Bodega Activa:</label>
+                    <select id="select-bodega">
+                        <option value="1">Bodega 1 (Principal - Rollos/Bultos)</option>
+                        <option value="2">Bodega 2 (Secundaria - Empaques/Paquetes)</option>
+                    </select>
+                </div>
+                <div class="system-status">
+                    <span id="backend-status-badge" class="badge badge-success">
+                        <i class="ph ph-circle-wavy-check"></i> Base de Datos Conectada
+                    </span>
+                    <span id="clock-display" class="clock">00:00:00</span>
+                </div>
+            </header>
+
+            <!-- VISTA 1: DASHBOARD -->
+            <section id="vista-dashboard" class="vista-page active">
+                <div class="page-title">
+                    <h2>Tablero de Control WMS</h2>
+                    <p>Resumen general del estado de inventario textil y almacenamiento.</p>
+                </div>
+
+                <div class="kpi-grid">
+                    <div class="kpi-card">
+                        <div class="kpi-icon blue"><i class="ph ph-package"></i></div>
+                        <div class="kpi-data">
+                            <span class="kpi-title">Total Ítems</span>
+                            <h3 id="kpi-total-items">0</h3>
+                        </div>
+                    </div>
+                    <div class="kpi-card">
+                        <div class="kpi-icon green"><i class="ph ph-hash"></i></div>
+                        <div class="kpi-data">
+                            <span class="kpi-title">Total Piezas (Stock)</span>
+                            <h3 id="kpi-total-piezas">0 pz</h3>
+                        </div>
+                    </div>
+                    <div class="kpi-card">
+                        <div class="kpi-icon orange"><i class="ph ph-warehouse"></i></div>
+                        <div class="kpi-data">
+                            <span class="kpi-title">Ítems en Bodega 1</span>
+                            <h3 id="kpi-bodega-1">0</h3>
+                        </div>
+                    </div>
+                    <div class="kpi-card">
+                        <div class="kpi-icon purple"><i class="ph ph-buildings"></i></div>
+                        <div class="kpi-data">
+                            <span class="kpi-title">Ítems en Bodega 2</span>
+                            <h3 id="kpi-bodega-2">0</h3>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="charts-grid">
+                    <div class="chart-card">
+                        <h4><i class="ph ph-chart-bar"></i> Distribución por Tipo de Empaque</h4>
+                        <div class="chart-container">
+                            <canvas id="chart-empaques"></canvas>
+                        </div>
+                    </div>
+                    <div class="chart-card">
+                        <h4><i class="ph ph-clock-counter-clock-wise"></i> Últimos Movimientos</h4>
+                        <div class="recent-list" id="dashboard-recent-list">
+                            <!-- Inyectado por JS -->
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- VISTA 2: INVENTARIO -->
+            <section id="vista-inventario" class="vista-page">
+                <div class="page-title flex-between">
+                    <div>
+                        <h2>Inventario General de Bodega</h2>
+                        <p>Catálogo de piezas, rollos, bultos y paquetes almacenados.</p>
+                    </div>
+                    <div class="btn-group">
+                        <button id="btn-export-csv" class="btn btn-outline">
+                            <i class="ph ph-download-simple"></i> Exportar CSV
+                        </button>
+                    </div>
+                </div>
+
+                <div class="table-filters">
+                    <div class="search-box">
+                        <i class="ph ph-magnifying-glass"></i>
+                        <input type="text" id="input-search-inventario" placeholder="Buscar por ID, Producto, Color, Composición...">
+                    </div>
+                    <select id="filter-tipo">
+                        <option value="TODOS">Todos los Empaques</option>
+                        <option value="BULTO">BULTO</option>
+                        <option value="PAQUETE">PAQUETE</option>
+                        <option value="ROLLO">ROLLO</option>
+                    </select>
+                </div>
+
+                <div class="table-wrapper">
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                <th>ID (QR)</th>
+                                <th>Nombre Producto</th>
+                                <th>Medidas</th>
+                                <th>Stock (Pz)</th>
+                                <th>Color</th>
+                                <th>Composición</th>
+                                <th>Tipo</th>
+                                <th>Bodega</th>
+                                <th>Acciones</th>
+                            </tr>
+                        </thead>
+                        <tbody id="tbody-inventario">
+                            <!-- Inyectado por JS -->
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+
+            <!-- VISTA 3: REGISTRO / INGRESO DE PRODUCTOS -->
+            <section id="vista-registro" class="vista-page">
+                <div class="page-title">
+                    <h2>Ingreso de Producto y Generación de Código QR</h2>
+                    <p>Captura los datos del producto en el orden correspondiente para registrarlo en el sistema.</p>
+                </div>
+
+                <div class="form-container-split">
+                    <form id="form-registro" class="card-form">
+                        
+                        <!-- 1. ID (QR) -->
+                        <div class="input-group">
+                            <label for="reg-id"><i class="ph ph-qr-code"></i> 1. ID / Código de Referencia (QR)</label>
+                            <div class="input-with-btn">
+                                <input type="text" id="reg-id" placeholder="Ej. HAM-1004" required>
+                                <button type="button" id="btn-gen-id" class="btn btn-secondary">Generar ID</button>
+                            </div>
+                        </div>
+
+                        <!-- 2. Nombre Producto -->
+                        <div class="input-group">
+                            <label for="reg-nombre"><i class="ph ph-text-t"></i> 2. Nombre del Producto</label>
+                            <input type="text" id="reg-nombre" placeholder="Ej. Toalla de Baño Hilaza" required>
+                        </div>
+
+                        <!-- 3. Medidas -->
+                        <div class="input-group">
+                            <label for="reg-medidas"><i class="ph ph-ruler"></i> 3. Medidas (Ancho x Largo)</label>
+                            <input type="text" id="reg-medidas" placeholder="Ej. 70 x 140" required>
+                        </div>
+
+                        <!-- 4. Stock de ese tipo de tela (pz) -->
+                        <div class="input-group">
+                            <label for="reg-stock"><i class="ph ph-number-square-one"></i> 4. Stock de Piezas (Pz)</label>
+                            <input type="number" id="reg-stock" placeholder="Ej. 100" min="1" required>
+                        </div>
+
+                        <!-- 5. Colores -->
+                        <div class="input-group">
+                            <label for="reg-color"><i class="ph ph-palette"></i> 5. Color / Tono</label>
+                            <input type="text" id="reg-color" placeholder="Ej. Blanco Óptico" required>
+                        </div>
+
+                        <!-- 6. Composición -->
+                        <div class="input-group">
+                            <label for="reg-composicion"><i class="ph ph-atom"></i> 6. Composición de la Tela</label>
+                            <input type="text" id="reg-composicion" placeholder="Ej. 100% Algodón Peinado" required>
+                        </div>
+
+                        <!-- 7. Tipo (BULTO, PAQUETE, ROLLO) -->
+                        <div class="input-group">
+                            <label for="reg-tipo"><i class="ph ph-package"></i> 7. Tipo de Empaque</label>
+                            <select id="reg-tipo" required>
+                                <option value="BULTO">BULTO</option>
+                                <option value="PAQUETE">PAQUETE</option>
+                                <option value="ROLLO">ROLLO</option>
+                            </select>
+                        </div>
+
+                        <button type="submit" class="btn btn-primary btn-block">
+                            <i class="ph ph-plus-circle"></i> Registrar en Base de Datos e Imprimir QR
+                        </button>
+                    </form>
+
+                    <!-- Preview del Código QR -->
+                    <div class="card-preview">
+                        <h3>Etiqueta de Identificación QR</h3>
+                        <div id="qr-preview-box" class="qr-box">
+                            <div id="qrcode"></div>
+                            <p id="qr-preview-text">Ingresa los datos para ver la etiqueta</p>
+                        </div>
+                        <button id="btn-imprimir-qr" class="btn btn-outline btn-block" disabled>
+                            <i class="ph ph-printer"></i> Imprimir Etiqueta QR
+                        </button>
+                    </div>
+                </div>
+            </section>
+
+            <!-- VISTA 4: ESCÁNER QR -->
+            <section id="vista-escaner" class="vista-page">
+                <div class="page-title">
+                    <h2>Escáner de Código QR en Tiempo Real</h2>
+                    <p>Lector de etiquetas para consulta instantánea y verificación contra la Base de Datos.</p>
+                </div>
+
+                <div class="scanner-grid">
+                    <div class="card-scanner">
+                        <div id="reader"></div>
+                        <div class="scanner-controls">
+                            <button id="btn-start-scanner" class="btn btn-primary">
+                                <i class="ph ph-camera"></i> Iniciar Cámara
+                            </button>
+                            <button id="btn-stop-scanner" class="btn btn-outline danger" style="display:none;">
+                                <i class="ph ph-camera-slash"></i> Detener
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Resultado de Escaneo -->
+                    <div class="card-result" id="scanner-result-box">
+                        <div class="empty-state" id="scanner-empty-state">
+                            <i class="ph ph-qr-code"></i>
+                            <p>Apunta la cámara al código QR del producto para consultar su estado en tiempo real.</p>
+                        </div>
+
+                        <div id="scanner-details" class="scanned-details hidden">
+                            <div class="detail-header">
+                                <span class="badge badge-success" id="scan-status">EN BASE DE DATOS</span>
+                                <h3 id="scan-title">HAM-1001</h3>
+                            </div>
+                            <div class="detail-grid">
+                                <div><strong>Nombre Producto:</strong> <span id="scan-nombre">-</span></div>
+                                <div><strong>Medidas:</strong> <span id="scan-medidas">-</span></div>
+                                <div><strong>Stock (Pz):</strong> <span id="scan-stock">-</span></div>
+                                <div><strong>Color:</strong> <span id="scan-color">-</span></div>
+                                <div><strong>Composición:</strong> <span id="scan-composicion">-</span></div>
+                                <div><strong>Tipo Empaque:</strong> <span id="scan-tipo">-</span></div>
+                                <div><strong>Bodega:</strong> <span id="scan-bodega">-</span></div>
+                                <div><strong>Fecha Reg:</strong> <span id="scan-fecha">-</span></div>
+                            </div>
+                            <div class="detail-actions">
+                                <button id="btn-scan-descontar" class="btn btn-warning">
+                                    <i class="ph ph-minus-circle"></i> Descontar 1 Pz
+                                </button>
+                                <button id="btn-scan-eliminar" class="btn btn-outline danger">
+                                    <i class="ph ph-trash"></i> Eliminar Registro
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- VISTA 5: BITÁCORA -->
+            <section id="vista-bitacora" class="vista-page">
+                <div class="page-title">
+                    <h2>Bitácora de Movimientos</h2>
+                    <p>Registro histórico auditables de ingresos, modificaciones y salidas.</p>
+                </div>
+
+                <div class="table-wrapper">
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                <th>Fecha y Hora</th>
+                                <th>Usuario</th>
+                                <th>Acción</th>
+                                <th>Bodega</th>
+                                <th>Detalle</th>
+                            </tr>
+                        </thead>
+                        <tbody id="tbody-bitacora">
+                            <!-- Inyectado por JS -->
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+
+        </main>
     </div>
 
-    <!-- Modal: Edición (Admin) -->
+    <!-- Modal Editar Producto -->
     <div id="modal-editar" class="modal-overlay">
-        <div class="modal-card">
-            <h2 style="margin-top:0; font-size: 1.2rem; display: flex; align-items: center; gap: 10px;">
-                <i class="ph ph-pencil-simple" style="color: var(--accent); font-size: 1.4rem;"></i>
-                Editar Producto <span id="edit-id-display" style="font-size:0.85rem; color:var(--primary); font-family:monospace;"></span>
-            </h2>
-            <form id="form-editar" class="grid-form" style="margin-top: 20px;">
+        <div class="modal-box">
+            <h3>Editar Registro de Inventario</h3>
+            <form id="form-editar">
+                <input type="hidden" id="edit-id">
                 <div class="input-group">
-                    <label for="edit-nombre"><i class="ph ph-tag" style="font-size:0.85rem;"></i> Nombre de Tela</label>
+                    <label for="edit-nombre">Nombre Producto</label>
                     <input type="text" id="edit-nombre" required>
                 </div>
                 <div class="input-group">
-                    <label for="edit-presentacion"><i class="ph ph-package" style="font-size:0.85rem;"></i> Empaque</label>
-                    <select id="edit-presentacion" required>
-                        <option value="Rollo">🔄 Rollo</option>
-                        <option value="Bulto">📦 Bulto</option>
-                        <option value="Paquete">🎁 Paquete</option>
-                    </select>
+                    <label for="edit-medidas">Medidas</label>
+                    <input type="text" id="edit-medidas" required>
                 </div>
                 <div class="input-group">
-                    <label for="edit-composicion"><i class="ph ph-flask" style="font-size:0.85rem;"></i> Composición</label>
-                    <input type="text" id="edit-composicion" required>
+                    <label for="edit-stock">Stock (Pz)</label>
+                    <input type="number" id="edit-stock" min="0" required>
                 </div>
                 <div class="input-group">
-                    <label for="edit-color"><i class="ph ph-paint-bucket" style="font-size:0.85rem;"></i> Color</label>
+                    <label for="edit-color">Color</label>
                     <input type="text" id="edit-color" required>
                 </div>
                 <div class="input-group">
-                    <label for="edit-metros"><i class="ph ph-ruler" style="font-size:0.85rem;"></i> Metros</label>
-                    <input type="number" id="edit-metros" step="0.1" min="0.1" required>
+                    <label for="edit-composicion">Composición</label>
+                    <input type="text" id="edit-composicion" required>
                 </div>
                 <div class="input-group">
-                    <label for="edit-peso"><i class="ph ph-scales" style="font-size:0.85rem;"></i> Peso (Kg)</label>
-                    <input type="number" id="edit-peso" step="0.1" min="0.1" required>
+                    <label for="edit-tipo">Tipo Empaque</label>
+                    <select id="edit-tipo" required>
+                        <option value="BULTO">BULTO</option>
+                        <option value="PAQUETE">PAQUETE</option>
+                        <option value="ROLLO">ROLLO</option>
+                    </select>
                 </div>
-                <div style="grid-column:1/-1; display:flex; gap:12px; margin-top:18px;">
-                    <button type="button" class="btn btn-outline" style="flex:1;" id="btn-cancelar-edicion">
-                        <i class="ph ph-x" aria-hidden="true"></i> Cancelar
-                    </button>
-                    <button type="submit" class="btn btn-warning" style="flex:1;">
-                        <i class="ph ph-check" aria-hidden="true"></i> Guardar Cambios
-                    </button>
+                <div class="modal-actions">
+                    <button type="button" class="btn btn-outline" id="btn-cancelar-editar">Cancelar</button>
+                    <button type="submit" class="btn btn-primary">Guardar Cambios</button>
                 </div>
             </form>
         </div>
     </div>
 
     <!-- Toast Notifications -->
-    <div id="toast-container" class="toast-container" aria-live="polite"></div>
+    <div id="toast-container" class="toast-container"></div>
 
-    <!-- Print Frame -->
-    <iframe id="print-frame" title="Impresión de Etiqueta QR"></iframe>
+    <!-- Frame de Impresión oculto -->
+    <iframe id="print-frame" style="display:none;" title="Impresión de Etiqueta"></iframe>
 
-    <!-- 🚀 Lógica App -->
     <script src="js/app.js"></script>
 </body>
 </html>

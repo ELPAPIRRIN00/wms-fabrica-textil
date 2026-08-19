@@ -1,7 +1,7 @@
 /**
  * =========================================================
- * 🧠 H.A.M. POO - WMS Textil (FABRICA 2.0)
- * Lógica Principal de la Aplicación (Múltiples Empaques & Stock)
+ * 🧠 H.A.M. POO - WMS Textil (v2.0)
+ * Lógica Principal Frontend (Integrado con PostgreSQL & QR por ID)
  * =========================================================
  */
 
@@ -14,1085 +14,687 @@
         bodegaActiva: 1,
         vistaActual: 'dashboard',
         chartInstancia: null,
-        rolloSeleccionado: null,
-        scanner: null,
-        scannerLimpiando: false,
+        productoEscaneadoActual: null,
+        html5QrcodeScanner: null,
         inventario: [],
         bitacora: [],
-        useBackend: false,
+        useBackend: true,
+
         cuentas: {
             admin: { password: '1234', nombre: 'Administrador' },
-            operador: { password: '1234', nombre: 'Operador' }
+            operador: { password: '1234', nombre: 'Operador de Bodega' }
         },
 
         /* ---------- Inicialización ---------- */
         async init() {
-            await this.comprobarConexionBackend();
+            this.iniciarReloj();
             await this.cargarDatos();
             this.configurarNavegacion();
             this.configurarEventos();
-            this.poblarSelectorTelasExistentes();
             this.verificarSesion();
         },
 
+        iniciarReloj() {
+            const clockEl = document.getElementById('clock-display');
+            setInterval(() => {
+                const now = new Date();
+                if (clockEl) {
+                    clockEl.textContent = now.toLocaleTimeString('es-MX');
+                }
+            }, 1000);
+        },
+
         obtenerFechaActual() {
-            const ahora = new Date();
-            return ahora.toLocaleString('es-MX', {
-                year: 'numeric',
-                month: '2-digit',
-                day: '2-digit',
-                hour: '2-digit',
-                minute: '2-digit',
-                second: '2-digit'
+            return new Date().toLocaleString('es-MX', {
+                year: 'numeric', month: '2-digit', day: '2-digit',
+                hour: '2-digit', minute: '2-digit', second: '2-digit'
             });
         },
 
-        async comprobarConexionBackend() {
-            try {
-                const res = await fetch('/api/productos', { method: 'GET' });
-                if (res.ok) {
-                    this.useBackend = true;
-                    console.log('🔗 Conectado al servidor Backend API REST.');
-                }
-            } catch (e) {
-                this.useBackend = false;
-                console.log('💾 Servidor API no disponible. Usando persistencia local (localStorage).');
-            }
-        },
-
+        /* ---------- Conexión con Backend REST ---------- */
         async cargarDatos() {
-            if (this.useBackend) {
-                try {
-                    const resProductos = await fetch('/api/productos');
-                    if (resProductos.ok) {
-                        const data = await resProductos.json();
-                        if (Array.isArray(data)) this.inventario = data;
-                    }
-                    const resBitacora = await fetch('/api/bitacora');
-                    if (resBitacora.ok) {
-                        const data = await resBitacora.json();
-                        if (Array.isArray(data)) this.bitacora = data;
-                    }
-                    this.poblarSelectorTelasExistentes();
-                    return;
-                } catch (err) {
-                    console.warn('⚠️ Error cargando desde Backend, recurriendo a localStorage:', err);
-                }
-            }
-
             try {
-                const rawInv = localStorage.getItem('ham_inventario');
-                const rawBit = localStorage.getItem('ham_bitacora');
-                this.inventario = rawInv !== null ? JSON.parse(rawInv) : this.getInventarioDemo();
-                this.bitacora = rawBit !== null ? JSON.parse(rawBit) : [];
-                
-                // Validar que sean arrays
-                if (!Array.isArray(this.inventario)) this.inventario = this.getInventarioDemo();
-                if (!Array.isArray(this.bitacora)) this.bitacora = [];
+                const resInv = await fetch('/api/productos');
+                if (resInv.ok) {
+                    this.inventario = await resInv.json();
+                }
+
+                const resBit = await fetch('/api/bitacora');
+                if (resBit.ok) {
+                    this.bitacora = await resBit.json();
+                }
+
+                this.useBackend = true;
+                this.actualizarStatusBadge(true);
+            } catch (err) {
+                console.warn('Servidor offline o sin conexión. Usando respaldo local.', err);
+                this.useBackend = false;
+                this.actualizarStatusBadge(false);
+            }
+
+            this.renderizarTodo();
+        },
+
+        actualizarStatusBadge(online) {
+            const badge = document.getElementById('backend-status-badge');
+            if (!badge) return;
+            if (online) {
+                badge.className = 'badge badge-success';
+                badge.innerHTML = '<i class="ph ph-circle-wavy-check"></i> PostgreSQL Conectado';
+            } else {
+                badge.className = 'badge badge-warning';
+                badge.innerHTML = '<i class="ph ph-warning"></i> Modo Local (Memoria)';
+            }
+        },
+
+        async sincronizarConBackend() {
+            if (!this.useBackend) return;
+            try {
+                await fetch('/api/sincronizar', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        inventario: this.inventario,
+                        bitacora: this.bitacora
+                    })
+                });
             } catch (e) {
-                console.error('Error parsing localStorage data:', e);
-                this.inventario = this.getInventarioDemo();
-                this.bitacora = [];
+                console.error('Error al sincronizar con backend:', e);
             }
-            this.poblarSelectorTelasExistentes();
-        },
-
-        getInventarioDemo() {
-            return [
-                { id: 'HAM-1001', tela: 'Algodón Peinado', presentacion: 'Rollo', composicion: '100% Algodón Peinado', color: 'Blanco Óptico', metros: 120, peso: 25, bodega: 1, fecha: this.obtenerFechaActual(), estado: 'Activo' },
-                { id: 'HAM-1002', tela: 'Algodón Peinado', presentacion: 'Rollo', composicion: '100% Algodón Peinado', color: 'Negro Intenso', metros: 80, peso: 18, bodega: 1, fecha: this.obtenerFechaActual(), estado: 'Activo' },
-                { id: 'HAM-1003', tela: 'Poliéster Deportivo', presentacion: 'Bulto', composicion: '100% Poliéster', color: 'Azul Marino', metros: 200, peso: 40, bodega: 2, fecha: this.obtenerFechaActual(), estado: 'Activo' }
-            ];
-        },
-
-        async guardarDatos() {
-            localStorage.setItem('ham_inventario', JSON.stringify(this.inventario));
-            localStorage.setItem('ham_bitacora', JSON.stringify(this.bitacora));
-
-            if (this.useBackend) {
-                try {
-                    await fetch('/api/sincronizar', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ inventario: this.inventario, bitacora: this.bitacora })
-                    });
-                } catch (e) {
-                    console.warn('Error sincronizando con backend:', e);
-                }
-            }
-            this.poblarSelectorTelasExistentes();
-        },
-
-        /* ---------- Autocompletado de Telas Existentes ---------- */
-        poblarSelectorTelasExistentes() {
-            const select = document.getElementById('reg-tela-existente');
-            if (!select) return;
-
-            const valorActual = select.value;
-            select.innerHTML = '<option value="">+ Registrar Nueva Tela...</option>';
-
-            // Obtener tipos de telas únicas del inventario
-            const telasUnicas = {};
-            this.inventario.forEach(item => {
-                if (item.tela && !telasUnicas[item.tela]) {
-                    telasUnicas[item.tela] = item.composicion || '';
-                }
-            });
-
-            for (const [tela, composicion] of Object.entries(telasUnicas)) {
-                const opt = document.createElement('option');
-                opt.value = tela;
-                opt.dataset.composicion = composicion;
-                opt.textContent = `${tela} (${composicion || 'Sin composición'})`;
-                select.appendChild(opt);
-            }
-
-            select.value = valorActual;
         },
 
         /* ---------- Autenticación ---------- */
         verificarSesion() {
-            const user = localStorage.getItem('ham_user');
-            const role = localStorage.getItem('ham_role');
-            if (user && role) {
-                this.usuario = user;
-                this.rol = role;
-                const userEl = document.getElementById('txt-usuario-activo');
-                if (userEl) {
-                    userEl.textContent = `👤 ${user.toUpperCase()} (${role})`;
-                }
-                const loginModal = document.getElementById('modal-login');
-                if (loginModal) loginModal.classList.remove('active');
-                this.cambiarVista('dashboard');
+            const sesionGuardada = localStorage.getItem('ham_wms_session');
+            if (sesionGuardada) {
+                const data = JSON.parse(sesionGuardada);
+                this.usuario = data.usuario;
+                this.rol = data.rol;
+                this.mostrarAppShell();
             } else {
-                const loginModal = document.getElementById('modal-login');
-                if (loginModal) loginModal.classList.add('active');
+                document.getElementById('login-modal').classList.add('active');
             }
         },
 
-        iniciarSesion(e) {
-            e.preventDefault();
-            const user = document.getElementById('login-user').value.trim().toLowerCase();
-            const pass = document.getElementById('login-pass').value.trim();
-            const errorEl = document.getElementById('error-login');
-
-            const cuenta = this.cuentas[user];
-            if (!cuenta) {
-                errorEl.textContent = 'Usuario no reconocido. Usa "admin" u "operador".';
-                errorEl.style.display = 'block';
-                return;
+        iniciarSesion(usuario, password) {
+            const cuenta = this.cuentas[usuario];
+            if (cuenta && cuenta.password === password) {
+                this.usuario = cuenta.nombre;
+                this.rol = usuario === 'admin' ? 'Administrador' : 'Operador';
+                localStorage.setItem('ham_wms_session', JSON.stringify({ usuario: this.usuario, rol: this.rol }));
+                document.getElementById('login-modal').classList.remove('active');
+                this.mostrarAppShell();
+                this.mostrarToast(`Bienvenido al sistema, ${this.usuario}`, 'success');
+            } else {
+                this.mostrarToast('Contraseña incorrecta', 'danger');
             }
-
-            if (pass !== cuenta.password) {
-                errorEl.textContent = 'Contraseña incorrecta. Usa 1234 para ambos perfiles.';
-                errorEl.style.display = 'block';
-                return;
-            }
-
-            const rol = user === 'admin' ? 'admin' : 'operador';
-            localStorage.setItem('ham_user', user);
-            localStorage.setItem('ham_role', rol);
-            this.usuario = user;
-            this.rol = rol;
-            this.registrarMovimiento('Inicio de Sesión', '-', `Usuario ${user} (${cuenta.nombre})`);
-            this.verificarSesion();
         },
 
         cerrarSesion() {
-            if (this.usuario) {
-                this.registrarMovimiento('Cierre de Sesión', '-', `Usuario ${this.usuario}`);
-            }
-            localStorage.removeItem('ham_user');
-            localStorage.removeItem('ham_role');
-            this.usuario = null;
-            this.rol = null;
+            localStorage.removeItem('ham_wms_session');
+            location.reload();
+        },
 
-            const formLogin = document.getElementById('form-login');
-            if (formLogin) formLogin.reset();
-            const errorLogin = document.getElementById('error-login');
-            if (errorLogin) errorLogin.style.display = 'none';
-            const modalLogin = document.getElementById('modal-login');
-            if (modalLogin) modalLogin.classList.add('active');
+        mostrarAppShell() {
+            document.getElementById('app-shell').classList.remove('hidden');
+            document.getElementById('user-display-name').textContent = this.usuario;
+            document.getElementById('user-display-role').textContent = this.rol;
+            this.renderizarTodo();
         },
 
         /* ---------- Navegación ---------- */
         configurarNavegacion() {
-            const navMenu = document.getElementById('nav-menu');
-            if (navMenu) {
-                navMenu.addEventListener('click', (e) => {
-                    const item = e.target.closest('.nav-item');
-                    if (!item) return;
-                    const vista = item.dataset.view;
-                    if (vista) this.cambiarVista(vista);
-                    this.cerrarMenuMovil();
-                });
-            }
+            const btns = document.querySelectorAll('.nav-btn');
+            btns.forEach(btn => {
+                btn.addEventListener('click', () => {
+                    const target = btn.getAttribute('data-target');
+                    btns.forEach(b => b.classList.remove('active'));
+                    btn.classList.add('active');
 
-            const btnLogout = document.getElementById('btn-logout');
-            if (btnLogout) {
-                btnLogout.addEventListener('click', () => this.cerrarSesion());
-            }
+                    document.querySelectorAll('.vista-page').forEach(page => page.classList.remove('active'));
+                    const pageTarget = document.getElementById(`vista-${target}`);
+                    if (pageTarget) pageTarget.classList.add('active');
 
-            const btnMenuMobile = document.getElementById('mobile-menu-toggle');
-            const btnUsuarioMobile = document.getElementById('mobile-user-toggle');
-            const backdrop = document.getElementById('mobile-backdrop');
-
-            if (btnMenuMobile) {
-                btnMenuMobile.addEventListener('click', () => {
-                    document.body.classList.toggle('mobile-nav-open');
-                });
-            }
-
-            if (btnUsuarioMobile) {
-                btnUsuarioMobile.addEventListener('click', () => {
-                    const sidebar = document.querySelector('.sidebar');
-                    document.body.classList.add('mobile-nav-open');
-                    if (sidebar) {
-                        sidebar.scrollTop = 0;
+                    this.vistaActual = target;
+                    if (target === 'escaner') {
+                        this.iniciarCamaraScanner();
+                    } else {
+                        this.detenerCamaraScanner();
                     }
+
+                    this.renderizarTodo();
                 });
-            }
-
-            if (backdrop) {
-                backdrop.addEventListener('click', () => this.cerrarMenuMovil());
-            }
-
-            window.addEventListener('resize', () => {
-                if (window.innerWidth > 768) this.cerrarMenuMovil();
             });
         },
 
-        cerrarMenuMovil() {
-            document.body.classList.remove('mobile-nav-open');
-        },
-
-        async cambiarVista(vista) {
-            if (this.vistaActual === 'escaner' && vista !== 'escaner') {
-                await this.detenerScanner();
-            }
-            this.vistaActual = vista;
-
-            document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
-            const navItem = document.querySelector(`.nav-item[data-view="${vista}"]`);
-            if (navItem) navItem.classList.add('active');
-
-            document.querySelectorAll('.view-section').forEach(el => el.classList.remove('active'));
-
-            if (vista === 'bodega1' || vista === 'bodega2') {
-                this.bodegaActiva = vista === 'bodega1' ? 1 : 2;
-                const tituloBodega = document.getElementById('titulo-bodega');
-                if (tituloBodega) {
-                    tituloBodega.innerHTML = `<i class="ph ph-warehouse"></i> Gestión de Bodega ${this.bodegaActiva}`;
-                }
-                const badge = document.getElementById('badge-bodega');
-                if (badge) {
-                    badge.className = `badge badge-b${this.bodegaActiva}`;
-                    badge.textContent = `Ubicación Física: Bodega ${this.bodegaActiva}`;
-                }
-                const vistaBodegas = document.getElementById('vista-bodegas');
-                if (vistaBodegas) vistaBodegas.classList.add('active');
-                this.renderTablaBodega();
-            } else {
-                const vistaTarget = document.getElementById(`vista-${vista}`);
-                if (vistaTarget) vistaTarget.classList.add('active');
-            }
-
-            if (vista === 'dashboard') this.renderDashboard();
-            if (vista === 'bitacora') this.renderBitacora();
-            if (vista === 'escaner') this.iniciarScanner();
-        },
-
-        /* ---------- Eventos Generales ---------- */
+        /* ---------- Configuración de Eventos ---------- */
         configurarEventos() {
-            const formLogin = document.getElementById('form-login');
-            if (formLogin) formLogin.addEventListener('submit', (e) => this.iniciarSesion(e));
-
-            const formRegistro = document.getElementById('form-registro');
-            if (formRegistro) formRegistro.addEventListener('submit', (e) => this.registrarNuevoRollo(e));
-
-            // Cambio en el selector de Tela Existente -> Autocompletar nombre y composición
-            const selectTelaExistente = document.getElementById('reg-tela-existente');
-            if (selectTelaExistente) {
-                selectTelaExistente.addEventListener('change', (e) => {
-                    const selectedOpt = e.target.options[e.target.selectedIndex];
-                    const inputNombre = document.getElementById('reg-nombre');
-                    const inputComposicion = document.getElementById('reg-composicion');
-                    if (e.target.value) {
-                        inputNombre.value = e.target.value;
-                        if (selectedOpt.dataset.composicion) {
-                            inputComposicion.value = selectedOpt.dataset.composicion;
-                        }
-                    }
-                });
-            }
-
-            const btnExportar = document.getElementById('btn-exportar');
-            if (btnExportar) btnExportar.addEventListener('click', () => this.exportarCSV());
-
-            const btnCerrarDetalles = document.getElementById('btn-cerrar-detalles');
-            if (btnCerrarDetalles) btnCerrarDetalles.addEventListener('click', () => this.cerrarModal('modal-detalles'));
-
-            const btnDescargarQR = document.getElementById('btn-descargar-qr');
-            if (btnDescargarQR) btnDescargarQR.addEventListener('click', () => this.descargarQR());
-
-            const btnReimprimir = document.getElementById('btn-reimprimir');
-            if (btnReimprimir) btnReimprimir.addEventListener('click', () => this.imprimirQR());
-
-            const btnSalida = document.getElementById('btn-salida');
-            if (btnSalida) btnSalida.addEventListener('click', () => this.registrarSalida());
-
-            const btnEditarAdmin = document.getElementById('btn-editar-admin');
-            if (btnEditarAdmin) btnEditarAdmin.addEventListener('click', () => this.abrirEdicionAdmin());
-
-            const btnEliminarAdmin = document.getElementById('btn-eliminar-admin');
-            if (btnEliminarAdmin) btnEliminarAdmin.addEventListener('click', () => this.eliminarRolloAdmin());
-
-            const btnCancelarEdicion = document.getElementById('btn-cancelar-edicion');
-            if (btnCancelarEdicion) btnCancelarEdicion.addEventListener('click', () => this.cerrarModal('modal-editar'));
-
-            const formEditar = document.getElementById('form-editar');
-            if (formEditar) formEditar.addEventListener('submit', (e) => this.guardarEdicion(e));
-
-            const inputQrFile = document.getElementById('input-qr-file');
-            if (inputQrFile) {
-                inputQrFile.addEventListener('change', (e) => this.procesarArchivoImagenQR(e));
-            }
-
-            // Búsqueda en bodega con debounce
-            let timeoutBuscador;
-            const buscador = document.getElementById('buscador-bodega');
-            if (buscador) {
-                buscador.addEventListener('input', () => {
-                    clearTimeout(timeoutBuscador);
-                    timeoutBuscador = setTimeout(() => this.renderTablaBodega(), 300);
-                });
-            }
-
-            // Delegación de eventos en tablas
-            const tablaBodega = document.getElementById('tabla-bodega-activa');
-            if (tablaBodega) {
-                tablaBodega.addEventListener('click', (e) => {
-                    const row = e.target.closest('.data-row');
-                    if (row && row.dataset.id) this.abrirDetalles(row.dataset.id);
-                });
-            }
-
-            const tablaUltimos = document.getElementById('tabla-ultimos');
-            if (tablaUltimos) {
-                tablaUltimos.addEventListener('click', (e) => {
-                    const row = e.target.closest('.data-row');
-                    if (row && row.dataset.id) this.abrirDetalles(row.dataset.id);
-                });
-            }
-        },
-
-        /* ---------- Renderizado de Inventario Agrupado y Stock ---------- */
-        renderTablaBodega() {
-            const tbody = document.getElementById('tabla-bodega-activa');
-            if (!tbody) return;
-            tbody.innerHTML = '';
-
-            const buscador = document.getElementById('buscador-bodega');
-            const filtro = buscador ? buscador.value.toLowerCase().trim() : '';
-            const activos = this.inventario.filter(r => r.bodega === this.bodegaActiva && r.estado === 'Activo');
-
-            const filtrados = filtro ? activos.filter(r =>
-                r.id.toLowerCase().includes(filtro) ||
-                r.tela.toLowerCase().includes(filtro) ||
-                (r.presentacion && r.presentacion.toLowerCase().includes(filtro)) ||
-                (r.composicion && r.composicion.toLowerCase().includes(filtro)) ||
-                r.color.toLowerCase().includes(filtro)
-            ) : activos;
-
-            const grupos = {};
-            filtrados.forEach(r => {
-                if (!grupos[r.tela]) grupos[r.tela] = [];
-                grupos[r.tela].push(r);
+            // Formulario Login
+            document.getElementById('form-login').addEventListener('submit', (e) => {
+                e.preventDefault();
+                const user = document.getElementById('login-usuario').value;
+                const pass = document.getElementById('login-pass').value;
+                this.iniciarSesion(user, pass);
             });
 
-            for (const [tela, piezas] of Object.entries(grupos)) {
-                // Métricas acumuladas del grupo de tela
-                const totalMetros = piezas.reduce((acc, p) => acc + Number(p.metros), 0).toFixed(1);
-                const totalPeso = piezas.reduce((acc, p) => acc + Number(p.peso), 0).toFixed(1);
+            // Logout
+            document.getElementById('btn-logout').addEventListener('click', () => this.cerrarSesion());
 
-                const trGrupo = document.createElement('tr');
-                trGrupo.className = 'group-header';
-                trGrupo.innerHTML = `
-                    <td colspan="7">
-                        <i class="ph ph-caret-down"></i> <strong>${tela}</strong> 
-                        <span style="margin-left: 10px; font-weight:normal; font-size:0.8rem; color:var(--text-secondary);">
-                            (${piezas.length} piezas físicas | Stock: ${totalMetros} m | ${totalPeso} kg)
-                        </span>
-                    </td>
-                `;
-                tbody.appendChild(trGrupo);
-
-                piezas.forEach(pieza => {
-                    const presentacion = pieza.presentacion || 'Rollo';
-                    const composicion = pieza.composicion || 'N/A';
-
-                    const tr = document.createElement('tr');
-                    tr.className = 'data-row';
-                    tr.dataset.id = pieza.id;
-                    tr.innerHTML = `
-                        <td style="font-family:monospace; color:var(--primary); font-weight:600;">${pieza.id}</td>
-                        <td><span class="badge" style="background:var(--accent-dim); color:var(--accent); border:1px solid rgba(245,158,11,0.2);">${presentacion}</span></td>
-                        <td style="color:var(--text-secondary);">${pieza.color}</td>
-                        <td style="font-size:0.8rem; color:var(--text-muted);">${composicion}</td>
-                        <td><strong style="color:var(--primary);">${pieza.metros} m</strong></td>
-                        <td style="color:var(--text-secondary);">${pieza.peso} kg</td>
-                        <td><span class="badge badge-b${pieza.bodega}">Bodega ${pieza.bodega}</span></td>
-                    `;
-                    tbody.appendChild(tr);
-                });
-            }
-
-            if (filtrados.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="7" style="text-align:center; padding:20px; color:var(--text-muted);">No hay piezas/telas registradas en esta bodega.</td></tr>';
-            }
-        },
-
-        renderDashboard() {
-            const tbody = document.getElementById('tabla-ultimos');
-            if (tbody) {
-                tbody.innerHTML = '';
-                const ultimos = [...this.inventario].filter(r => r.estado === 'Activo').reverse().slice(0, 5);
-                ultimos.forEach(r => {
-                    const tr = document.createElement('tr');
-                    tr.className = 'data-row';
-                    tr.dataset.id = r.id;
-                    tr.innerHTML = `
-                        <td style="font-family:monospace; color:var(--primary); font-weight:600;">${r.id}</td>
-                        <td style="color:var(--text-secondary);">${r.tela}</td>
-                        <td><span class="badge" style="background:var(--accent-dim); color:var(--accent); border:1px solid rgba(245,158,11,0.2);">${r.presentacion || 'Rollo'}</span></td>
-                        <td><span class="badge badge-b${r.bodega}">Bodega ${r.bodega}</span></td>
-                        <td><strong style="color:var(--primary);">${r.metros} m</strong></td>
-                    `;
-                    tbody.appendChild(tr);
-                });
-                if (ultimos.length === 0) {
-                    tbody.innerHTML = '<tr><td colspan="5" style="text-align:center; padding:15px; color:var(--text-muted);">Sin ingresos recientes.</td></tr>';
-                }
-            }
-
-            let mB1 = 0, mB2 = 0;
-            this.inventario.forEach(r => {
-                if (r.estado === 'Activo') {
-                    if (r.bodega === 1) mB1 += Number(r.metros);
-                    else if (r.bodega === 2) mB2 += Number(r.metros);
-                }
+            // Bodega Selector
+            document.getElementById('select-bodega').addEventListener('change', (e) => {
+                this.bodegaActiva = parseInt(e.target.value, 10);
+                this.mostrarToast(`Cambiado a Bodega ${this.bodegaActiva}`, 'info');
+                this.renderizarTodo();
             });
 
-            const canvas = document.getElementById('chartBodegas');
-            if (!canvas) return;
-            const ctx = canvas.getContext('2d');
+            // Generar ID Aleatorio
+            document.getElementById('btn-gen-id').addEventListener('click', () => {
+                const randomNum = Math.floor(1000 + Math.random() * 9000);
+                document.getElementById('reg-id').value = `HAM-${randomNum}`;
+            });
+
+            // Formulario de Registro (En el orden solicitado)
+            document.getElementById('form-registro').addEventListener('submit', (e) => {
+                e.preventDefault();
+                this.registrarProducto();
+            });
+
+            // Buscador e Invetario Filters
+            document.getElementById('input-search-inventario').addEventListener('input', () => this.renderizarTablaInventario());
+            document.getElementById('filter-tipo').addEventListener('change', () => this.renderizarTablaInventario());
+
+            // Exportar CSV
+            document.getElementById('btn-export-csv').addEventListener('click', () => this.exportarCSV());
+
+            // Botón Imprimir QR
+            document.getElementById('btn-imprimir-qr').addEventListener('click', () => this.imprimirEtiquetaQR());
+
+            // Control Escáner
+            document.getElementById('btn-start-scanner').addEventListener('click', () => this.iniciarCamaraScanner());
+            document.getElementById('btn-stop-scanner').addEventListener('click', () => this.detenerCamaraScanner());
+
+            // Acciones Escáner
+            document.getElementById('btn-scan-descontar').addEventListener('click', () => this.descontarStockEscaneado());
+            document.getElementById('btn-scan-eliminar').addEventListener('click', () => this.eliminarProductoEscaneado());
+
+            // Modal Editar
+            document.getElementById('btn-cancelar-editar').addEventListener('click', () => {
+                document.getElementById('modal-editar').classList.remove('active');
+            });
+            document.getElementById('form-editar').addEventListener('submit', (e) => {
+                e.preventDefault();
+                this.guardarEdicionProducto();
+            });
+        },
+
+        /* ---------- Renderizado General ---------- */
+        renderizarTodo() {
+            this.renderizarKPIs();
+            this.renderizarGraficoEmpaques();
+            this.renderizarTablaInventario();
+            this.renderizarBitacora();
+            this.renderizarRecientesDashboard();
+        },
+
+        renderizarKPIs() {
+            const totalItems = this.inventario.length;
+            const totalPiezas = this.inventario.reduce((acc, i) => acc + (parseInt(i.stock_pz, 10) || 0), 0);
+            const bodega1 = this.inventario.filter(i => parseInt(i.bodega, 10) === 1).length;
+            const bodega2 = this.inventario.filter(i => parseInt(i.bodega, 10) === 2).length;
+
+            document.getElementById('kpi-total-items').textContent = totalItems;
+            document.getElementById('kpi-total-piezas').textContent = `${totalPiezas} pz`;
+            document.getElementById('kpi-bodega-1').textContent = bodega1;
+            document.getElementById('kpi-bodega-2').textContent = bodega2;
+        },
+
+        renderizarGraficoEmpaques() {
+            const ctx = document.getElementById('chart-empaques');
+            if (!ctx) return;
+
+            const bultos = this.inventario.filter(i => i.tipo === 'BULTO').length;
+            const paquetes = this.inventario.filter(i => i.tipo === 'PAQUETE').length;
+            const rollos = this.inventario.filter(i => i.tipo === 'ROLLO').length;
 
             if (this.chartInstancia) {
                 this.chartInstancia.destroy();
-                this.chartInstancia = null;
             }
 
-            if (typeof Chart !== 'undefined') {
-                this.chartInstancia = new Chart(ctx, {
-                    type: 'doughnut',
-                    data: {
-                        labels: ['Bodega 1', 'Bodega 2'],
-                        datasets: [{
-                            data: [mB1, mB2],
-                            backgroundColor: ['#3b82f6', '#c084fc'],
-                            hoverBackgroundColor: ['#60a5fa', '#d8b4fe'],
-                            borderWidth: 2,
-                            borderColor: '#111827'
-                        }]
-                    },
-                    options: {
-                        responsive: true,
-                        maintainAspectRatio: false,
-                        plugins: {
-                            legend: {
-                                position: 'bottom',
-                                labels: {
-                                    color: '#94a3b8',
-                                    font: { family: 'Inter', weight: '600', size: 12 },
-                                    padding: 20,
-                                    usePointStyle: true,
-                                    pointStyleWidth: 12
-                                }
-                            }
-                        },
-                        cutout: '68%'
+            this.chartInstancia = new Chart(ctx, {
+                type: 'doughnut',
+                data: {
+                    labels: ['Bultos', 'Paquetes', 'Rollos'],
+                    datasets: [{
+                        data: [bultos, paquetes, rollos],
+                        backgroundColor: ['#f59e0b', '#8b5cf6', '#3b82f6'],
+                        borderWidth: 0
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { position: 'bottom', labels: { color: '#94a3b8' } }
                     }
-                });
-            }
-        },
-
-        renderBitacora() {
-            const tbody = document.getElementById('tabla-bitacora');
-            if (!tbody) return;
-            tbody.innerHTML = '';
-            this.bitacora.forEach(b => {
-                const tr = document.createElement('tr');
-                tr.innerHTML = `
-                    <td style="font-size:0.8rem; color:var(--text-muted); font-family:monospace;">${b.fecha}</td>
-                    <td><strong style="color:var(--text-primary);">${b.usuario}</strong></td>
-                    <td style="color:var(--primary); font-weight:700;">${b.accion}</td>
-                    <td style="color:var(--text-secondary);">${b.bodega === '-' ? '-' : 'Bodega ' + b.bodega}</td>
-                    <td style="color:var(--text-secondary);">${b.detalle}</td>
-                `;
-                tbody.appendChild(tr);
+                }
             });
-            if (this.bitacora.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="5" style="text-align:center; padding:20px; color:var(--text-muted);">Sin movimientos registrados.</td></tr>';
+        },
+
+        renderizarTablaInventario() {
+            const tbody = document.getElementById('tbody-inventario');
+            if (!tbody) return;
+
+            const busqueda = document.getElementById('input-search-inventario').value.toLowerCase();
+            const filtroTipo = document.getElementById('filter-tipo').value;
+
+            const filtrados = this.inventario.filter(item => {
+                const conc = `${item.id} ${item.nombre_producto} ${item.color} ${item.composicion}`.toLowerCase();
+                const cumpleBusqueda = conc.includes(busqueda);
+                const cumpleTipo = filtroTipo === 'TODOS' || item.tipo === filtroTipo;
+                return cumpleBusqueda && cumpleTipo;
+            });
+
+            if (filtrados.length === 0) {
+                tbody.innerHTML = `<tr><td colspan="9" style="text-align:center; padding:30px; color:#64748b;">No se encontraron registros de inventario.</td></tr>`;
+                return;
             }
+
+            tbody.innerHTML = filtrados.map(item => `
+                <tr>
+                    <td><strong>${item.id}</strong></td>
+                    <td>${item.nombre_producto || item.tela}</td>
+                    <td>${item.medidas || 'N/A'}</td>
+                    <td><span class="badge badge-info">${item.stock_pz || item.metros || 0} pz</span></td>
+                    <td>${item.color}</td>
+                    <td>${item.composicion}</td>
+                    <td><span class="badge badge-type">${item.tipo || item.presentacion}</span></td>
+                    <td>Bodega ${item.bodega}</td>
+                    <td>
+                        <div class="btn-group-sm">
+                            <button class="btn-icon" title="Editar" onclick="App.abrirModalEditar('${item.id}')"><i class="ph ph-pencil"></i></button>
+                            <button class="btn-icon danger" title="Eliminar" onclick="App.eliminarProducto('${item.id}')"><i class="ph ph-trash"></i></button>
+                        </div>
+                    </td>
+                </tr>
+            `).join('');
         },
 
-        /* ---------- Operaciones CRUD e Ingresos ---------- */
-        generarId() {
-            const timestamp = Date.now().toString(36).toUpperCase().slice(-5);
-            const random = Math.random().toString(36).substring(2, 5).toUpperCase();
-            return `HAM-${timestamp}${random}`;
+        renderizarBitacora() {
+            const tbody = document.getElementById('tbody-bitacora');
+            if (!tbody) return;
+
+            tbody.innerHTML = this.bitacora.map(b => `
+                <tr>
+                    <td style="font-size:0.85rem; color:#94a3b8;">${b.fecha}</td>
+                    <td><strong>${b.usuario}</strong></td>
+                    <td><span class="badge">${b.accion}</span></td>
+                    <td>${b.bodega}</td>
+                    <td>${b.detalle}</td>
+                </tr>
+            `).join('');
         },
 
-        async registrarNuevoRollo(e) {
-            e.preventDefault();
+        renderizarRecientesDashboard() {
+            const container = document.getElementById('dashboard-recent-list');
+            if (!container) return;
+
+            const ultimos = this.bitacora.slice(0, 5);
+            container.innerHTML = ultimos.map(b => `
+                <div class="recent-item">
+                    <i class="ph ph-clock-counter-clock-wise"></i>
+                    <div>
+                        <strong>${b.accion} - ${b.usuario}</strong>
+                        <p>${b.detalle}</p>
+                        <small>${b.fecha}</small>
+                    </div>
+                </div>
+            `).join('');
+        },
+
+        /* ---------- REGISTRO DE PRODUCTOS EN ORDEN ---------- */
+        async registrarProducto() {
+            const id = document.getElementById('reg-id').value.trim();
             const nombre = document.getElementById('reg-nombre').value.trim();
-            const presentacion = document.getElementById('reg-presentacion').value;
-            const composicion = document.getElementById('reg-composicion').value.trim();
+            const medidas = document.getElementById('reg-medidas').value.trim();
+            const stock = parseInt(document.getElementById('reg-stock').value, 10);
             const color = document.getElementById('reg-color').value.trim();
-            const metros = parseFloat(document.getElementById('reg-metros').value);
-            const peso = parseFloat(document.getElementById('reg-peso').value);
+            const composicion = document.getElementById('reg-composicion').value.trim();
+            const tipo = document.getElementById('reg-tipo').value;
 
-            // Validaciones exhaustivas
-            if (!nombre) {
-                this.mostrarToast('❌ El nombre de la tela es requerido.', 'error');
-                return;
-            }
-            if (!presentacion) {
-                this.mostrarToast('❌ Selecciona un tipo de empaque.', 'error');
-                return;
-            }
-            if (!composicion) {
-                this.mostrarToast('❌ La composición es requerida.', 'error');
-                return;
-            }
-            if (!color) {
-                this.mostrarToast('❌ El color es requerido.', 'error');
-                return;
-            }
-            if (isNaN(metros) || metros <= 0) {
-                this.mostrarToast('❌ Los metros deben ser un número válido mayor a 0.', 'error');
-                return;
-            }
-            if (isNaN(peso) || peso <= 0) {
-                this.mostrarToast('❌ El peso debe ser un número válido mayor a 0.', 'error');
+            if (!id || !nombre || isNaN(stock) || !color) {
+                this.mostrarToast('Por favor completa los campos requeridos', 'warning');
                 return;
             }
 
-            const nuevo = {
-                id: this.generarId(),
-                tela: nombre,
-                presentacion: presentacion,
-                composicion: composicion,
-                color: color,
-                metros: metros,
-                peso: peso,
+            const nuevoProducto = {
+                id,
+                nombre_producto: nombre,
+                medidas,
+                stock_pz: stock,
+                color,
+                composicion,
+                tipo,
                 bodega: this.bodegaActiva,
                 fecha: this.obtenerFechaActual(),
                 estado: 'Activo'
             };
 
-            this.inventario.push(nuevo);
-            this.registrarMovimiento('INGRESO', this.bodegaActiva, `Entrada de ${nuevo.presentacion} ${nuevo.id} (${nuevo.tela} - ${color} - ${composicion})`);
-            await this.guardarDatos();
-            this.renderTablaBodega();
+            // Guardar en backend REST
+            try {
+                const res = await fetch('/api/productos', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(nuevoProducto)
+                });
 
-            const formRegistro = document.getElementById('form-registro');
-            if (formRegistro) formRegistro.reset();
+                if (!res.ok) throw new Error('Error guardando en base de datos');
 
-            this.mostrarToast(`Pieza ${nuevo.id} (${nuevo.presentacion}) ingresada con éxito.`);
-            this.abrirDetalles(nuevo.id);
-        },
-
-        abrirDetalles(id) {
-            const rollo = this.inventario.find(r => r.id === id);
-            if (!rollo) return;
-            this.rolloSeleccionado = rollo;
-
-            document.getElementById('det-id').textContent = rollo.id;
-            document.getElementById('det-tela').textContent = rollo.tela;
-            document.getElementById('det-presentacion').textContent = rollo.presentacion || 'Rollo';
-            document.getElementById('det-composicion').textContent = rollo.composicion || 'N/A';
-            document.getElementById('det-color').textContent = rollo.color;
-            document.getElementById('det-metros').textContent = rollo.metros;
-            document.getElementById('det-peso').textContent = rollo.peso;
-            document.getElementById('det-bodega').textContent = `Bodega ${rollo.bodega}`;
-            document.getElementById('det-fecha').textContent = rollo.fecha;
-
-            // Generar vista previa del QR con Quiet Zone nítido
-            const qrContainer = document.getElementById('modal-qr-preview');
-            if (qrContainer) {
-                qrContainer.innerHTML = '';
-                if (typeof QRCode !== 'undefined') {
-                    new QRCode(qrContainer, {
-                        text: rollo.id,
-                        width: 150,
-                        height: 150,
-                        colorDark: "#000000",
-                        colorLight: "#ffffff",
-                        correctLevel: QRCode.CorrectLevel.H
-                    });
-                    qrContainer.style.background = '#ffffff';
-                    qrContainer.style.padding = '14px';
-                    qrContainer.style.borderRadius = '8px';
-                    qrContainer.style.display = 'inline-block';
-                    qrContainer.style.border = '1px solid #cbd5e1';
+                // Actualizar array local
+                const existingIdx = this.inventario.findIndex(i => i.id === id);
+                if (existingIdx >= 0) {
+                    this.inventario[existingIdx] = nuevoProducto;
+                } else {
+                    this.inventario.unshift(nuevoProducto);
                 }
-            }
 
-            const btnSalida = document.getElementById('btn-salida');
-            if (btnSalida) {
-                btnSalida.style.display = rollo.estado === 'Activo' ? 'inline-flex' : 'none';
-            }
+                this.registrarBitacora('Ingreso de Producto', `Registrado ${nombre} (${stock} pz) - Tipo ${tipo}`);
+                this.generarEtiquetaQR(id);
+                this.mostrarToast(`Producto ${id} registrado correctamente`, 'success');
+                this.renderizarTodo();
 
-            const adminActions = document.getElementById('admin-actions');
-            if (adminActions) {
-                adminActions.style.display = this.rol === 'admin' ? 'flex' : 'none';
-            }
-
-            const modalDetalles = document.getElementById('modal-detalles');
-            if (modalDetalles) modalDetalles.classList.add('active');
-        },
-
-        requierePermisoAdmin(mensaje = 'Esta acción requiere permisos de administrador.') {
-            if (this.rol !== 'admin') {
-                this.mostrarToast(mensaje, 'error');
-                return false;
-            }
-            return true;
-        },
-
-        descargarQR() {
-            if (!this.rolloSeleccionado) return;
-            const qrContainer = document.getElementById('modal-qr-preview');
-            if (!qrContainer) return;
-
-            const img = qrContainer.querySelector('img');
-            const canvas = qrContainer.querySelector('canvas');
-            let dataUrl = null;
-
-            if (canvas) {
-                const padding = 20;
-                const exportCanvas = document.createElement('canvas');
-                exportCanvas.width = canvas.width + (padding * 2);
-                exportCanvas.height = canvas.height + (padding * 2);
-                const ctx = exportCanvas.getContext('2d');
-
-                ctx.fillStyle = '#ffffff';
-                ctx.fillRect(0, 0, exportCanvas.width, exportCanvas.height);
-                ctx.drawImage(canvas, padding, padding);
-
-                dataUrl = exportCanvas.toDataURL('image/png');
-            } else if (img && img.src) {
-                dataUrl = img.src;
-            }
-
-            if (dataUrl) {
-                const a = document.createElement('a');
-                a.href = dataUrl;
-                a.download = `QR_${this.rolloSeleccionado.id}.png`;
-                document.body.appendChild(a);
-                a.click();
-                document.body.removeChild(a);
-                this.mostrarToast('Código QR descargado como imagen PNG de alta precisión.');
-            } else {
-                this.mostrarToast('No se pudo generar la imagen para descarga.', 'error');
+            } catch (err) {
+                this.mostrarToast('Error al conectar con PostgreSQL', 'danger');
             }
         },
 
-        cerrarModal(id) {
-            const modal = document.getElementById(id);
-            if (modal) modal.classList.remove('active');
+        /* ---------- GENERACIÓN DE QR POR ID ÚNICO ---------- */
+        generarEtiquetaQR(idProducto) {
+            const box = document.getElementById('qrcode');
+            box.innerHTML = '';
+
+            // EL CÓDIGO QR GUARDA ÚNICAMENTE EL STRING DEL ID
+            new QRCode(box, {
+                text: idProducto,
+                width: 140,
+                height: 140,
+                colorDark: "#000000",
+                colorLight: "#ffffff",
+                correctLevel: QRCode.CorrectLevel.H
+            });
+
+            document.getElementById('qr-preview-text').textContent = `Código QR para ID: ${idProducto}`;
+            document.getElementById('btn-imprimir-qr').removeAttribute('disabled');
         },
 
-        /* ---------- Salidas Pieza por Pieza ---------- */
-        async registrarSalida() {
-            if (!this.rolloSeleccionado || this.rolloSeleccionado.estado !== 'Activo') return;
-
-            const confirmacion = confirm(`📦 ¿Confirmar SALIDA de la pieza (${this.rolloSeleccionado.presentacion}): ${this.rolloSeleccionado.id}?`);
-            if (!confirmacion) return;
-
-            this.rolloSeleccionado.estado = 'Salida';
-            this.registrarMovimiento(
-                'SALIDA',
-                this.rolloSeleccionado.bodega,
-                `Salida de ${this.rolloSeleccionado.presentacion} ${this.rolloSeleccionado.id} (${this.rolloSeleccionado.tela} - ${this.rolloSeleccionado.composicion || ''}).`
-            );
-            await this.guardarDatos();
-            this.cerrarModal('modal-detalles');
-            this.mostrarToast(`✅ Salida de ${this.rolloSeleccionado.presentacion} ${this.rolloSeleccionado.id} registrada con éxito.`, 'success');
-            
-            this.renderTablaBodega();
-            if (this.vistaActual === 'dashboard') this.renderDashboard();
-            if (this.vistaActual === 'escaner') {
-                // Volver a activar escáner para la siguiente pieza
-                setTimeout(() => this.iniciarScanner(), 400);
-            }
-        },
-
-        abrirEdicionAdmin() {
-            if (!this.rolloSeleccionado) return;
-            if (!this.requierePermisoAdmin('Solo el administrador puede editar piezas.')) {
+        imprimirEtiquetaQR() {
+            const qrCanvas = document.querySelector('#qrcode canvas');
+            if (!qrCanvas) {
+                this.mostrarToast('Genera un QR antes de imprimir', 'warning');
                 return;
             }
-            document.getElementById('edit-id-display').textContent = `(${this.rolloSeleccionado.id})`;
-            document.getElementById('edit-nombre').value = this.rolloSeleccionado.tela;
-            document.getElementById('edit-presentacion').value = this.rolloSeleccionado.presentacion || 'Rollo';
-            document.getElementById('edit-composicion').value = this.rolloSeleccionado.composicion || '';
-            document.getElementById('edit-color').value = this.rolloSeleccionado.color;
-            document.getElementById('edit-metros').value = this.rolloSeleccionado.metros;
-            document.getElementById('edit-peso').value = this.rolloSeleccionado.peso;
-            this.cerrarModal('modal-detalles');
+
+            const qrDataUrl = qrCanvas.toDataURL("image/png");
+            const printWindow = window.open('', '_blank');
+            printWindow.document.write(`
+                <html>
+                <head>
+                    <title>Impresión de Etiqueta QR WMS</title>
+                    <style>
+                        body { font-family: sans-serif; text-align: center; padding: 20px; }
+                        .ticket { border: 2px dashed #000; padding: 15px; display: inline-block; width: 220px; }
+                        h3 { margin: 5px 0; font-size: 16px; }
+                        p { margin: 3px 0; font-size: 12px; }
+                    </style>
+                </head>
+                <body onload="window.print(); window.close();">
+                    <div class="ticket">
+                        <h3>H.A.M. POO WMS</h3>
+                        <img src="${qrDataUrl}" width="130" />
+                        <p><strong>ID:</strong> ${document.getElementById('reg-id').value}</p>
+                        <p>${document.getElementById('reg-nombre').value}</p>
+                    </div>
+                </body>
+                </html>
+            `);
+            printWindow.document.close();
+        },
+
+        /* ---------- ESCÁNER QR CON VALIDACIÓN DIRECTA ---------- */
+        iniciarCamaraScanner() {
+            if (this.html5QrcodeScanner) return;
+
+            const config = { fps: 10, qrbox: { width: 220, height: 220 } };
+            this.html5QrcodeScanner = new Html5Qrcode("reader");
+
+            this.html5QrcodeScanner.start(
+                { facingMode: "environment" },
+                config,
+                (decodedText) => this.procesarLecturaQR(decodedText),
+                () => {}
+            ).then(() => {
+                document.getElementById('btn-start-scanner').style.display = 'none';
+                document.getElementById('btn-stop-scanner').style.display = 'inline-block';
+            }).catch(err => {
+                console.error("Error iniciando cámara:", err);
+                this.mostrarToast("No se pudo acceder a la cámara", "danger");
+            });
+        },
+
+        detenerCamaraScanner() {
+            if (this.html5QrcodeScanner) {
+                this.html5QrcodeScanner.stop().then(() => {
+                    this.html5QrcodeScanner.clear();
+                    this.html5QrcodeScanner = null;
+                    document.getElementById('btn-start-scanner').style.display = 'inline-block';
+                    document.getElementById('btn-stop-scanner').style.display = 'none';
+                }).catch(err => console.error(err));
+            }
+        },
+
+        // PROCESAMIENTO Y VALIDACIÓN EN BASE DE DATOS
+        async procesarLecturaQR(codigoEscaneado) {
+            const cleanId = codigoEscaneado.trim();
+
+            try {
+                // Consulta directa a PostgreSQL para verificar existencia real
+                const res = await fetch(`/api/productos/${encodeURIComponent(cleanId)}`);
+
+                if (!res.ok) {
+                    // SI FUE ELIMINADO MUESTRA ALERTA Y LIMPIA LA PANTALLA
+                    this.mostrarToast(`⚠️ El producto (${cleanId}) ha sido ELIMINADO de la Base de Datos.`, 'danger');
+                    this.ocultarDetallesEscaneo();
+                    return;
+                }
+
+                const producto = await res.json();
+                this.mostrarDetallesEscaneo(producto);
+                this.mostrarToast(`Producto ${producto.id} detectado correctamente`, 'success');
+
+            } catch (err) {
+                this.mostrarToast('Error consultando la base de datos', 'danger');
+            }
+        },
+
+        mostrarDetallesEscaneo(producto) {
+            this.productoEscaneadoActual = producto;
+            document.getElementById('scanner-empty-state').classList.add('hidden');
+            document.getElementById('scanner-details').classList.remove('hidden');
+
+            document.getElementById('scan-title').textContent = producto.id;
+            document.getElementById('scan-nombre').textContent = producto.nombre_producto || producto.tela;
+            document.getElementById('scan-medidas').textContent = producto.medidas || 'N/A';
+            document.getElementById('scan-stock').textContent = `${producto.stock_pz || producto.metros || 0} pz`;
+            document.getElementById('scan-color').textContent = producto.color;
+            document.getElementById('scan-composicion').textContent = producto.composicion;
+            document.getElementById('scan-tipo').textContent = producto.tipo || producto.presentacion;
+            document.getElementById('scan-bodega').textContent = `Bodega ${producto.bodega}`;
+            document.getElementById('scan-fecha').textContent = producto.fecha;
+        },
+
+        ocultarDetallesEscaneo() {
+            this.productoEscaneadoActual = null;
+            document.getElementById('scanner-details').classList.add('hidden');
+            document.getElementById('scanner-empty-state').classList.remove('hidden');
+        },
+
+        async descontarStockEscaneado() {
+            if (!this.productoEscaneadoActual) return;
+
+            let stockActual = parseInt(this.productoEscaneadoActual.stock_pz, 10);
+            if (stockActual <= 0) {
+                this.mostrarToast('El producto ya no tiene stock disponible', 'warning');
+                return;
+            }
+
+            this.productoEscaneadoActual.stock_pz = stockActual - 1;
+
+            try {
+                await fetch('/api/productos', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(this.productoEscaneadoActual)
+                });
+
+                this.registrarBitacora('Salida de Stock', `Descontada 1 pz de ${this.productoEscaneadoActual.id}. Quedan: ${this.productoEscaneadoActual.stock_pz} pz`);
+                this.mostrarDetallesEscaneo(this.productoEscaneadoActual);
+                this.mostrarToast('Stock actualizado (-1 pz)', 'success');
+                this.cargarDatos();
+
+            } catch (e) {
+                this.mostrarToast('Error al actualizar stock', 'danger');
+            }
+        },
+
+        async eliminarProductoEscaneado() {
+            if (!this.productoEscaneadoActual) return;
+            const id = this.productoEscaneadoActual.id;
+            await this.eliminarProducto(id);
+            this.ocultarDetallesEscaneo();
+        },
+
+        /* ---------- ELIMINACIÓN DEFINITIVA ---------- */
+        async eliminarProducto(id) {
+            if (!confirm(`¿Estás seguro de eliminar definitivamente el registro ${id}?`)) return;
+
+            try {
+                const res = await fetch(`/api/productos/${encodeURIComponent(id)}`, {
+                    method: 'DELETE'
+                });
+
+                if (!res.ok) throw new Error('No se pudo eliminar');
+
+                this.inventario = this.inventario.filter(i => i.id !== id);
+                this.registrarBitacora('Eliminación de Registro', `Registro ${id} eliminado de PostgreSQL.`);
+                this.mostrarToast(`Producto ${id} eliminado correctamente`, 'info');
+                this.renderizarTodo();
+
+            } catch (err) {
+                this.mostrarToast('Error al eliminar producto', 'danger');
+            }
+        },
+
+        /* ---------- EDICIÓN ---------- */
+        abrirModalEditar(id) {
+            const item = this.inventario.find(i => i.id === id);
+            if (!item) return;
+
+            document.getElementById('edit-id').value = item.id;
+            document.getElementById('edit-nombre').value = item.nombre_producto || item.tela;
+            document.getElementById('edit-medidas').value = item.medidas || '';
+            document.getElementById('edit-stock').value = item.stock_pz || item.metros || 0;
+            document.getElementById('edit-color').value = item.color;
+            document.getElementById('edit-composicion').value = item.composicion;
+            document.getElementById('edit-tipo').value = item.tipo || 'ROLLO';
+
             document.getElementById('modal-editar').classList.add('active');
         },
 
-        async guardarEdicion(e) {
-            e.preventDefault();
-            if (!this.rolloSeleccionado) {
-                this.mostrarToast('Error: No hay producto seleccionado.', 'error');
-                return;
-            }
-            if (!this.requierePermisoAdmin('Solo el administrador puede guardar cambios a productos.')) {
-                return;
-            }
+        async guardarEdicionProducto() {
+            const id = document.getElementById('edit-id').value;
+            const itemOriginal = this.inventario.find(i => i.id === id);
 
-            const nombre = document.getElementById('edit-nombre').value.trim();
-            const presentacion = document.getElementById('edit-presentacion').value;
-            const composicion = document.getElementById('edit-composicion').value.trim();
-            const color = document.getElementById('edit-color').value.trim();
-            const metros = parseFloat(document.getElementById('edit-metros').value);
-            const peso = parseFloat(document.getElementById('edit-peso').value);
+            if (!itemOriginal) return;
 
-            if (!nombre || !presentacion || !composicion || !color) {
-                this.mostrarToast('Todos los campos de texto son requeridos.', 'error');
-                return;
-            }
-            if (isNaN(metros) || metros <= 0) {
-                this.mostrarToast('Los metros deben ser un número válido mayor a 0.', 'error');
-                return;
-            }
-            if (isNaN(peso) || peso <= 0) {
-                this.mostrarToast('El peso debe ser un número válido mayor a 0.', 'error');
-                return;
-            }
-
-            this.rolloSeleccionado.tela = nombre;
-            this.rolloSeleccionado.presentacion = presentacion;
-            this.rolloSeleccionado.composicion = composicion;
-            this.rolloSeleccionado.color = color;
-            this.rolloSeleccionado.metros = metros;
-            this.rolloSeleccionado.peso = peso;
-
-            this.registrarMovimiento('EDICIÓN', this.rolloSeleccionado.bodega, `Administrador modificó ${this.rolloSeleccionado.id}`);
-            await this.guardarDatos();
-            this.cerrarModal('modal-editar');
-            this.mostrarToast('Cambios guardados correctamente.');
-
-            if (this.vistaActual === 'dashboard') this.renderDashboard();
-            else this.renderTablaBodega();
-            this.abrirDetalles(this.rolloSeleccionado.id);
-        },
-
-        async eliminarRolloAdmin() {
-            if (!this.rolloSeleccionado) return;
-            if (!this.requierePermisoAdmin('Solo el administrador puede eliminar piezas.')) {
-                return;
-            }
-            if (!confirm(`⚠️ ¿Eliminar permanentemente la pieza ${this.rolloSeleccionado.id}?`)) return;
-
-            const idEliminado = this.rolloSeleccionado.id;
-            const bodegaTarget = this.rolloSeleccionado.bodega;
-            this.inventario = this.inventario.filter(r => r.id !== idEliminado);
-            this.registrarMovimiento('ELIMINACIÓN', bodegaTarget, `Administrador eliminó ${idEliminado}`);
-            await this.guardarDatos();
-            this.cerrarModal('modal-detalles');
-            this.mostrarToast('Pieza eliminada del sistema.', 'error');
-
-            if (this.vistaActual === 'dashboard') this.renderDashboard();
-            else this.renderTablaBodega();
-        },
-
-        registrarMovimiento(accion, bodega, detalle) {
-            this.bitacora.unshift({
-                fecha: this.obtenerFechaActual(),
-                usuario: this.usuario ? this.usuario.toUpperCase() : 'Sistema',
-                accion: accion,
-                bodega: bodega,
-                detalle: detalle
-            });
-            this.guardarDatos();
-        },
-
-        /* ---------- Lector de Archivos de Imagen QR Directo ---------- */
-        async procesarArchivoImagenQR(e) {
-            const file = e.target.files[0];
-            if (!file) return;
-
-            const resultEl = document.getElementById('qr-file-result');
-            if (resultEl) resultEl.innerHTML = '<span style="color:var(--primary);">🔍 Procesando y escaneando imagen...</span>';
-
-            try {
-                const html5Qrcode = new Html5Qrcode("scanner-container");
-                const decodedText = await html5Qrcode.scanFile(file, true);
-
-                if (resultEl) resultEl.innerHTML = `<span style="color:var(--success);">✅ ¡Código Detectado!: ${decodedText}</span>`;
-                this.mostrarToast(`Código detectado: ${decodedText}`);
-
-                const rollo = this.inventario.find(r => r.id === decodedText);
-                if (rollo) {
-                    this.abrirDetalles(rollo.id);
-                } else {
-                    this.mostrarToast(`El código (${decodedText}) no pertenece a ningún producto registrado.`, 'error');
-                }
-            } catch (err) {
-                console.error('Error al decodificar imagen QR:', err);
-                if (resultEl) {
-                    resultEl.innerHTML = '<span style="color:var(--danger);">❌ No se detectó ningún código QR en la imagen.</span>';
-                }
-                this.mostrarToast('No se pudo decodificar el código QR de esta imagen.', 'error');
-            } finally {
-                e.target.value = '';
-            }
-        },
-
-        /* ---------- Escáner QR de Cámara (Salidas Pieza por Pieza) ---------- */
-        iniciarScanner() {
-            const container = document.getElementById('scanner-container');
-            if (!container) return;
-            container.innerHTML = '';
-
-            if (typeof Html5QrcodeScanner === 'undefined') {
-                container.innerHTML = '<p style="padding:20px; color:var(--danger);">Cargando lector de código QR...</p>';
-                return;
-            }
-
-            this.scanner = new Html5QrcodeScanner("scanner-container", {
-                fps: 10,
-                qrbox: { width: 240, height: 240 },
-                experimentalFeatures: {
-                    useBarCodeDetectorIfSupported: true
-                },
-                supportedScanTypes: [
-                    Html5QrcodeScanType.SCAN_TYPE_CAMERA,
-                    Html5QrcodeScanType.SCAN_TYPE_FILE
-                ]
-            }, false);
-
-            this.scanner.render(
-                async (decodedText) => {
-                    await this.detenerScanner();
-                    this.mostrarToast(`Código detectado: ${decodedText}`);
-                    const rollo = this.inventario.find(r => r.id === decodedText);
-                    if (rollo) {
-                        this.abrirDetalles(rollo.id);
-                    } else {
-                        this.mostrarToast('El código QR no pertenece a ningún producto registrado.', 'error');
-                    }
-                },
-                (error) => {
-                    // Silenciar mensajes continuos
-                }
-            );
-
-            this.traducirEscanerAEspanol();
-        },
-
-        traducirEscanerAEspanol() {
-            const container = document.getElementById('scanner-container');
-            if (!container) return;
-
-            const traducirTextos = () => {
-                try {
-                    const btnPermission = container.querySelector('#html5-qrcode-button-camera-permission');
-                    if (btnPermission?.textContent?.includes('Request Camera Permissions')) {
-                        btnPermission.textContent = '🎥 Solicitar Permiso para Usar la Cámara';
-                    }
-
-                    const btnStart = container.querySelector('#html5-qrcode-button-camera-start');
-                    if (btnStart?.textContent?.includes('Start Scanning')) {
-                        btnStart.textContent = '▶️ Iniciar Escáner de Cámara';
-                    }
-
-                    const btnStop = container.querySelector('#html5-qrcode-button-camera-stop');
-                    if (btnStop?.textContent?.includes('Stop Scanning')) {
-                        btnStop.textContent = '⏹️ Detener Escáner';
-                    }
-
-                    const selectCamera = container.querySelector('#html5-qrcode-select-camera');
-                    if (selectCamera?.previousSibling?.textContent?.includes('Select Camera')) {
-                        selectCamera.previousSibling.textContent = 'Seleccionar Cámara: ';
-                    }
-
-                    const anchorType = container.querySelector('#html5-qrcode-anchor-scan-type-change');
-                    if (anchorType?.textContent) {
-                        if (anchorType.textContent.includes('Scan an Image File')) {
-                            anchorType.textContent = '📁 Subir o escanear una imagen con código QR';
-                        } else if (anchorType.textContent.includes('Scan using camera directly')) {
-                            anchorType.textContent = '📷 Usar la cámara directamente';
-                        }
-                    }
-
-                    const fileInputLabel = container.querySelector('#html5-qrcode-button-file-selection');
-                    if (fileInputLabel?.textContent?.includes('Choose Image')) {
-                        fileInputLabel.textContent = '🖼️ Seleccionar Imagen de QR';
-                    }
-                } catch (err) {
-                    console.warn('Error al traducir elementos del escáner:', err);
-                }
+            const editado = {
+                ...itemOriginal,
+                nombre_producto: document.getElementById('edit-nombre').value.trim(),
+                medidas: document.getElementById('edit-medidas').value.trim(),
+                stock_pz: parseInt(document.getElementById('edit-stock').value, 10),
+                color: document.getElementById('edit-color').value.trim(),
+                composicion: document.getElementById('edit-composicion').value.trim(),
+                tipo: document.getElementById('edit-tipo').value
             };
 
-            traducirTextos();
             try {
-                const observer = new MutationObserver(traducirTextos);
-                observer.observe(container, { childList: true, subtree: true });
-            } catch (err) {
-                console.warn('Error al crear observer del escáner:', err);
+                await fetch('/api/productos', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(editado)
+                });
+
+                document.getElementById('modal-editar').classList.remove('active');
+                this.registrarBitacora('Edición de Producto', `Actualizados datos de ${id}`);
+                this.mostrarToast(`Registro ${id} actualizado`, 'success');
+                this.cargarDatos();
+
+            } catch (e) {
+                this.mostrarToast('Error al guardar edición', 'danger');
             }
         },
 
-        async detenerScanner() {
-            if (this.scanner && !this.scannerLimpiando) {
-                this.scannerLimpiando = true;
-                try {
-                    await this.scanner.clear();
-                } catch (e) {
-                    console.warn('Detención limpia del escáner:', e);
-                } finally {
-                    this.scanner = null;
-                    this.scannerLimpiando = false;
-                }
-            }
+        /* ---------- BITÁCORA Y EXPORTACIÓN ---------- */
+        async registrarBitacora(accion, detalle) {
+            const nuevoRegistro = {
+                fecha: this.obtenerFechaActual(),
+                usuario: this.usuario || 'Sistema',
+                accion,
+                bodega: `Bodega ${this.bodegaActiva}`,
+                detalle
+            };
+
+            this.bitacora.unshift(nuevoRegistro);
+            this.sincronizarConBackend();
+            this.renderizarBitacora();
+            this.renderizarRecientesDashboard();
         },
 
-        /* ---------- Impresión de Etiquetas QR ---------- */
-        imprimirQR() {
-            if (!this.rolloSeleccionado) {
-                this.mostrarToast('No hay producto seleccionado para imprimir.', 'error');
-                return;
-            }
-
-            const iframe = document.getElementById('print-frame');
-            if (!iframe) {
-                this.mostrarToast('Error: No se encontró el frame de impresión.', 'error');
-                return;
-            }
-
-            try {
-                const doc = iframe.contentDocument || iframe.contentWindow.document;
-                doc.open();
-                doc.write(`
-                    <!DOCTYPE html>
-                    <html lang="es">
-                    <head>
-                        <meta charset="UTF-8">
-                        <title>Etiqueta QR - ${this.rolloSeleccionado.id}</title>
-                        <style>
-                            body { margin: 1cm; font-family: system-ui, -apple-system, sans-serif; text-align: center; color: #000; }
-                            .etiqueta { border: 2px dashed #000; padding: 20px; width: 85mm; margin: auto; border-radius: 8px; }
-                            h3 { margin: 0 0 5px 0; font-size: 14pt; font-weight: 800; text-transform: uppercase; }
-                            .badge-type { display: inline-block; font-size: 9pt; font-weight: bold; background: #e2e8f0; padding: 2px 8px; border-radius: 4px; margin-bottom: 8px; }
-                            p { margin: 4px 0; font-size: 10pt; }
-                            .qr-box { margin: 15px auto; display: flex; justify-content: center; align-items: center; background: #fff; padding: 10px; border-radius: 6px; }
-                            .qr-box img, .qr-box canvas { display: block; margin: 0 auto; }
-                            .code-id { font-family: monospace; font-size: 13pt; font-weight: bold; margin-top: 8px; }
-                            .empresa { font-size: 8pt; font-weight: bold; margin-top: 12px; border-top: 1px solid #000; padding-top: 6px; text-transform: uppercase; letter-spacing: 0.5px; }
-                        </style>
-                        <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"><\/script>
-                    </head>
-                    <body>
-                        <div class="etiqueta">
-                            <h3>${this.rolloSeleccionado.tela}</h3>
-                            <div class="badge-type">Empaque: ${this.rolloSeleccionado.presentacion || 'Rollo'}</div>
-                            <p><strong>Composición:</strong> ${this.rolloSeleccionado.composicion || 'N/A'}</p>
-                            <p><strong>Color:</strong> ${this.rolloSeleccionado.color}</p>
-                            <p><strong>Metros:</strong> ${this.rolloSeleccionado.metros} m | <strong>Peso:</strong> ${this.rolloSeleccionado.peso} kg</p>
-                            <div id="qr-temp" class="qr-box"></div>
-                            <div class="code-id">${this.rolloSeleccionado.id}</div>
-                            <div class="empresa">H.A.M. Poo - Sistema WMS Textil</div>
-                        </div>
-                        <script>
-                            window.onload = function() {
-                                try {
-                                    new QRCode(document.getElementById('qr-temp'), {
-                                        text: "${this.rolloSeleccionado.id}",
-                                        width: 140,
-                                        height: 140,
-                                        colorDark: "#000000",
-                                        colorLight: "#ffffff",
-                                        correctLevel: QRCode.CorrectLevel.H
-                                    });
-                                    setTimeout(function() {
-                                        window.focus();
-                                        window.print();
-                                    }, 300);
-                                } catch (e) {
-                                    console.error('Error al generar QR de impresión:', e);
-                                }
-                            };
-                        </script>
-                    </body>
-                    </html>
-                `);
-                doc.close();
-                this.mostrarToast('Abriendo vista previa de impresión...');
-            } catch (err) {
-                console.error('Error en impresión de QR:', err);
-                this.mostrarToast('Error al preparar la impresión.', 'error');
-            }
-        },
-
-        /* ---------- Exportación a CSV ---------- */
         exportarCSV() {
             if (this.inventario.length === 0) {
-                this.mostrarToast('No hay datos en el inventario para exportar.', 'error');
+                this.mostrarToast('No hay datos para exportar', 'warning');
                 return;
             }
 
-            let csv = '\uFEFFID,Tela,Empaque,Composicion,Color,Metros,Peso,Bodega,Estado,Fecha\n';
-            this.inventario.forEach(r => {
-                const escapeCsv = (str) => `"${String(str).replace(/"/g, '""')}"`;
-                csv += `${r.id},${escapeCsv(r.tela)},${escapeCsv(r.presentacion || 'Rollo')},${escapeCsv(r.composicion || 'N/A')},${escapeCsv(r.color)},${r.metros},${r.peso},${r.bodega},${r.estado},"${r.fecha}"\n`;
+            let csv = 'ID,Nombre Producto,Medidas,Stock (Pz),Color,Composición,Tipo,Bodega,Fecha Reg\n';
+            this.inventario.forEach(i => {
+                csv += `"${i.id}","${i.nombre_producto || i.tela}","${i.medidas || ''}",${i.stock_pz || 0},"${i.color}","${i.composicion}","${i.tipo}","Bodega ${i.bodega}","${i.fecha}"\n`;
             });
 
             const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
             const url = URL.createObjectURL(blob);
             const a = document.createElement('a');
             a.href = url;
-            a.download = `Inventario_WMS_HAM_${Date.now()}.csv`;
-            document.body.appendChild(a);
+            a.download = `Inventario_WMS_Textil_${Date.now()}.csv`;
             a.click();
-            document.body.removeChild(a);
             URL.revokeObjectURL(url);
-            this.registrarMovimiento('Exportación', '-', 'Inventario completo exportado a archivo CSV.');
+            this.registrarBitacora('Exportación CSV', 'Inventario descargado en formato CSV');
         },
 
-        /* ---------- Notificaciones Toast ---------- */
-        mostrarToast(mensaje, tipo = 'success') {
+        mostrarToast(mensaje, tipo = 'info') {
             const container = document.getElementById('toast-container');
             if (!container) return;
 
             const toast = document.createElement('div');
-            toast.className = `toast ${tipo}`;
-            const icono = tipo === 'success' ? 'ph-check-circle' : 'ph-warning';
-            toast.innerHTML = `<i class="ph ${icono}"></i> <span>${mensaje}</span>`;
+            toast.className = `toast toast-${tipo}`;
+            toast.innerHTML = `<span>${mensaje}</span>`;
             container.appendChild(toast);
 
             setTimeout(() => {
                 toast.style.opacity = '0';
-                toast.style.transition = 'opacity 0.3s ease';
                 setTimeout(() => toast.remove(), 300);
             }, 3500);
         }
     };
 
-    window.addEventListener('DOMContentLoaded', () => App.init());
+    window.App = App;
+    document.addEventListener('DOMContentLoaded', () => App.init());
 })();
