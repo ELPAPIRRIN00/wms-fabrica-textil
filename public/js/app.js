@@ -19,6 +19,11 @@
         inventario: [],
         bitacora: [],
         useBackend: true,
+        storageKeys: {
+            inventarioBodega1: 'ham_wms_inventario_bodega_1',
+            inventarioBodega2: 'ham_wms_inventario_bodega_2',
+            bitacora: 'ham_wms_bitacora'
+        },
 
         cuentas: {
             admin: { password: '1234', nombre: 'Administrador' },
@@ -54,25 +59,87 @@
         /* ---------- Conexión con Backend REST ---------- */
         async cargarDatos() {
             try {
-                const resInv = await fetch('/api/productos');
-                if (resInv.ok) {
-                    this.inventario = await resInv.json();
+                const [resInv, resBit] = await Promise.all([
+                    fetch('/api/productos'),
+                    fetch('/api/bitacora')
+                ]);
+                if (!resInv.ok || !resBit.ok) throw new Error('API no disponible');
+
+                const inventario = await resInv.json();
+                const bitacora = await resBit.json();
+                if (!Array.isArray(inventario) || !Array.isArray(bitacora)) {
+                    throw new Error('Respuesta inválida de la API');
                 }
 
-                const resBit = await fetch('/api/bitacora');
-                if (resBit.ok) {
-                    this.bitacora = await resBit.json();
-                }
+                this.inventario = inventario.map(item => this.normalizarProducto(item));
+                this.bitacora = bitacora;
+                this.guardarRespaldoLocal();
 
                 this.useBackend = true;
                 this.actualizarStatusBadge(true);
             } catch (err) {
-                console.warn('Servidor offline o sin conexión. Usando respaldo local.', err);
+                console.warn('Servidor offline o sin conexión. Usando respaldo local.', err.message);
                 this.useBackend = false;
+                this.cargarRespaldoLocal();
                 this.actualizarStatusBadge(false);
             }
 
             this.renderizarTodo();
+        },
+
+        normalizarProducto(item) {
+            return {
+                ...item,
+                id: String(item.id || '').trim(),
+                nombre_producto: String(item.nombre_producto || item.tela || '').trim(),
+                medidas: String(item.medidas || 'N/A').trim(),
+                stock_pz: Math.max(0, parseInt(item.stock_pz ?? item.metros ?? 0, 10) || 0),
+                color: String(item.color || '').trim(),
+                composicion: String(item.composicion || '').trim(),
+                tipo: String(item.tipo || item.presentacion || 'ROLLO').toUpperCase(),
+                bodega: Number(item.bodega) === 2 ? 2 : 1,
+                estado: item.estado || 'Activo'
+            };
+        },
+
+        cargarRespaldoLocal() {
+            const leer = (key) => {
+                try {
+                    const valor = JSON.parse(localStorage.getItem(key) || '[]');
+                    return Array.isArray(valor) ? valor : [];
+                } catch (error) {
+                    return [];
+                }
+            };
+
+            const bodega1 = leer(this.storageKeys.inventarioBodega1);
+            const bodega2 = leer(this.storageKeys.inventarioBodega2);
+            const inventarioAnterior = leer('ham_wms_inventario');
+            this.inventario = [...bodega1, ...bodega2];
+
+            if (this.inventario.length === 0 && inventarioAnterior.length > 0) {
+                this.inventario = inventarioAnterior.map(item => this.normalizarProducto(item));
+                this.guardarRespaldoLocal();
+            }
+
+            try {
+                const bitacora = JSON.parse(localStorage.getItem(this.storageKeys.bitacora) || '[]');
+                this.bitacora = Array.isArray(bitacora) ? bitacora : [];
+            } catch (error) {
+                this.bitacora = [];
+            }
+        },
+
+        guardarRespaldoLocal() {
+            const bodega1 = this.inventario.filter(item => Number(item.bodega) === 1);
+            const bodega2 = this.inventario.filter(item => Number(item.bodega) === 2);
+            localStorage.setItem(this.storageKeys.inventarioBodega1, JSON.stringify(bodega1));
+            localStorage.setItem(this.storageKeys.inventarioBodega2, JSON.stringify(bodega2));
+            localStorage.setItem(this.storageKeys.bitacora, JSON.stringify(this.bitacora));
+        },
+
+        productosDeBodegaActiva() {
+            return this.inventario.filter(item => Number(item.bodega) === this.bodegaActiva);
         },
 
         actualizarStatusBadge(online) {
@@ -107,13 +174,20 @@
         verificarSesion() {
             const sesionGuardada = localStorage.getItem('ham_wms_session');
             if (sesionGuardada) {
-                const data = JSON.parse(sesionGuardada);
-                this.usuario = data.usuario;
-                this.rol = data.rol;
-                this.mostrarAppShell();
-            } else {
-                document.getElementById('login-modal').classList.add('active');
+                try {
+                    const data = JSON.parse(sesionGuardada);
+                    if (data.usuario && data.rol) {
+                        this.usuario = data.usuario;
+                        this.rol = data.rol;
+                        document.getElementById('login-modal')?.classList.remove('active');
+                        this.mostrarAppShell();
+                        return;
+                    }
+                } catch (error) {
+                    localStorage.removeItem('ham_wms_session');
+                }
             }
+            document.getElementById('login-modal').classList.add('active');
         },
 
         iniciarSesion(usuario, password) {
@@ -163,8 +237,24 @@
                     }
 
                     this.renderizarTodo();
+                    this.cerrarMenuMovil();
                 });
             });
+
+            document.getElementById('btn-mobile-menu')?.addEventListener('click', () => {
+                document.body.classList.toggle('mobile-menu-open');
+            });
+            document.getElementById('btn-mobile-user')?.addEventListener('click', () => {
+                document.body.classList.add('mobile-menu-open');
+            });
+            document.getElementById('mobile-backdrop')?.addEventListener('click', () => this.cerrarMenuMovil());
+            window.addEventListener('resize', () => {
+                if (window.innerWidth > 768) this.cerrarMenuMovil();
+            });
+        },
+
+        cerrarMenuMovil() {
+            document.body.classList.remove('mobile-menu-open');
         },
 
         /* ---------- Configuración de Eventos ---------- */
@@ -203,6 +293,14 @@
             document.getElementById('input-search-inventario').addEventListener('input', () => this.renderizarTablaInventario());
             document.getElementById('filter-tipo').addEventListener('change', () => this.renderizarTablaInventario());
 
+            document.getElementById('tbody-inventario').addEventListener('click', (e) => {
+                const button = e.target.closest('[data-action][data-id]');
+                if (!button) return;
+                const id = button.dataset.id;
+                if (button.dataset.action === 'edit') this.abrirModalEditar(id);
+                if (button.dataset.action === 'delete') this.eliminarProducto(id);
+            });
+
             // Exportar CSV
             document.getElementById('btn-export-csv').addEventListener('click', () => this.exportarCSV());
 
@@ -239,8 +337,8 @@
         renderizarKPIs() {
             const totalItems = this.inventario.length;
             const totalPiezas = this.inventario.reduce((acc, i) => acc + (parseInt(i.stock_pz, 10) || 0), 0);
-            const bodega1 = this.inventario.filter(i => parseInt(i.bodega, 10) === 1).length;
-            const bodega2 = this.inventario.filter(i => parseInt(i.bodega, 10) === 2).length;
+            const bodega1 = this.inventario.filter(i => Number(i.bodega) === 1).length;
+            const bodega2 = this.inventario.filter(i => Number(i.bodega) === 2).length;
 
             document.getElementById('kpi-total-items').textContent = totalItems;
             document.getElementById('kpi-total-piezas').textContent = `${totalPiezas} pz`;
@@ -252,9 +350,15 @@
             const ctx = document.getElementById('chart-empaques');
             if (!ctx) return;
 
-            const bultos = this.inventario.filter(i => i.tipo === 'BULTO').length;
-            const paquetes = this.inventario.filter(i => i.tipo === 'PAQUETE').length;
-            const rollos = this.inventario.filter(i => i.tipo === 'ROLLO').length;
+            if (typeof Chart === 'undefined') {
+                ctx.parentElement.innerHTML = '<p class="empty-state">Gráfico no disponible sin conexión a la biblioteca visual.</p>';
+                return;
+            }
+
+            const productos = this.productosDeBodegaActiva();
+            const bultos = productos.filter(i => i.tipo === 'BULTO').length;
+            const paquetes = productos.filter(i => i.tipo === 'PAQUETE').length;
+            const rollos = productos.filter(i => i.tipo === 'ROLLO').length;
 
             if (this.chartInstancia) {
                 this.chartInstancia.destroy();
@@ -287,7 +391,7 @@
             const busqueda = document.getElementById('input-search-inventario').value.toLowerCase();
             const filtroTipo = document.getElementById('filter-tipo').value;
 
-            const filtrados = this.inventario.filter(item => {
+            const filtrados = this.productosDeBodegaActiva().filter(item => {
                 const conc = `${item.id} ${item.nombre_producto} ${item.color} ${item.composicion}`.toLowerCase();
                 const cumpleBusqueda = conc.includes(busqueda);
                 const cumpleTipo = filtroTipo === 'TODOS' || item.tipo === filtroTipo;
@@ -299,7 +403,13 @@
                 return;
             }
 
-            tbody.innerHTML = filtrados.map(item => `
+            tbody.innerHTML = filtrados.map(item => {
+                const accionesAdmin = this.rol === 'Administrador' ? `
+                    <button class="btn-icon" title="Editar" data-action="edit" data-id="${item.id}"><i class="ph ph-pencil"></i></button>
+                    <button class="btn-icon danger" title="Eliminar" data-action="delete" data-id="${item.id}"><i class="ph ph-trash"></i></button>
+                ` : '<span class="badge badge-info">Solo lectura</span>';
+
+                return `
                 <tr>
                     <td><strong>${item.id}</strong></td>
                     <td>${item.nombre_producto || item.tela}</td>
@@ -311,12 +421,12 @@
                     <td>Bodega ${item.bodega}</td>
                     <td>
                         <div class="btn-group-sm">
-                            <button class="btn-icon" title="Editar" onclick="App.abrirModalEditar('${item.id}')"><i class="ph ph-pencil"></i></button>
-                            <button class="btn-icon danger" title="Eliminar" onclick="App.eliminarProducto('${item.id}')"><i class="ph ph-trash"></i></button>
+                            ${accionesAdmin}
                         </div>
                     </td>
                 </tr>
-            `).join('');
+                `;
+            }).join('');
         },
 
         renderizarBitacora() {
@@ -361,8 +471,14 @@
             const composicion = document.getElementById('reg-composicion').value.trim();
             const tipo = document.getElementById('reg-tipo').value;
 
-            if (!id || !nombre || isNaN(stock) || !color) {
+            if (!id || !nombre || !medidas || isNaN(stock) || stock < 1 || !color || !composicion) {
                 this.mostrarToast('Por favor completa los campos requeridos', 'warning');
+                return;
+            }
+
+            const productoExistente = this.inventario.find(item => item.id === id);
+            if (productoExistente) {
+                this.mostrarToast(`El ID ${id} ya existe en Bodega ${productoExistente.bodega}. Usa un ID único.`, 'warning');
                 return;
             }
 
@@ -403,13 +519,27 @@
                 this.renderizarTodo();
 
             } catch (err) {
-                this.mostrarToast('Error al conectar con PostgreSQL', 'danger');
+                const existingIdx = this.inventario.findIndex(item => item.id === id);
+                if (existingIdx >= 0) {
+                    this.inventario[existingIdx] = nuevoProducto;
+                } else {
+                    this.inventario.unshift(nuevoProducto);
+                }
+                this.registrarBitacora('Ingreso local', `Registrado ${nombre} (${stock} pz) - Tipo ${tipo}`);
+                this.generarEtiquetaQR(id);
+                this.renderizarTodo();
+                this.guardarRespaldoLocal();
+                this.mostrarToast('Guardado en modo local; se sincronizará al volver el servidor.', 'warning');
             }
         },
 
         /* ---------- GENERACIÓN DE QR POR ID ÚNICO ---------- */
         generarEtiquetaQR(idProducto) {
             const box = document.getElementById('qrcode');
+            if (!box || typeof QRCode === 'undefined') {
+                this.mostrarToast('No se pudo cargar el generador de códigos QR.', 'danger');
+                return;
+            }
             box.innerHTML = '';
 
             // EL CÓDIGO QR GUARDA ÚNICAMENTE EL STRING DEL ID
@@ -435,6 +565,10 @@
 
             const qrDataUrl = qrCanvas.toDataURL("image/png");
             const printWindow = window.open('', '_blank');
+            if (!printWindow) {
+                this.mostrarToast('El navegador bloqueó la ventana de impresión. Permite ventanas emergentes.', 'warning');
+                return;
+            }
             printWindow.document.write(`
                 <html>
                 <head>
@@ -462,6 +596,11 @@
         /* ---------- ESCÁNER QR CON VALIDACIÓN DIRECTA ---------- */
         iniciarCamaraScanner() {
             if (this.html5QrcodeScanner) return;
+
+            if (typeof Html5Qrcode === 'undefined') {
+                this.mostrarToast('El lector QR no está disponible sin conexión.', 'warning');
+                return;
+            }
 
             const config = { fps: 10, qrbox: { width: 220, height: 220 } };
             this.html5QrcodeScanner = new Html5Qrcode("reader");
@@ -494,6 +633,12 @@
         // PROCESAMIENTO Y VALIDACIÓN EN BASE DE DATOS
         async procesarLecturaQR(codigoEscaneado) {
             const cleanId = codigoEscaneado.trim();
+            const productoLocal = this.inventario.find(item => item.id === cleanId);
+            if (productoLocal && Number(productoLocal.bodega) !== this.bodegaActiva) {
+                this.mostrarToast(`El producto pertenece a Bodega ${productoLocal.bodega}. Cambia la bodega activa para consultarlo.`, 'warning');
+                this.ocultarDetallesEscaneo();
+                return;
+            }
 
             try {
                 // Consulta directa a PostgreSQL para verificar existencia real
@@ -507,6 +652,11 @@
                 }
 
                 const producto = await res.json();
+                if (Number(producto.bodega) !== this.bodegaActiva) {
+                    this.mostrarToast(`El producto pertenece a Bodega ${producto.bodega}.`, 'warning');
+                    this.ocultarDetallesEscaneo();
+                    return;
+                }
                 this.mostrarDetallesEscaneo(producto);
                 this.mostrarToast(`Producto ${producto.id} detectado correctamente`, 'success');
 
@@ -538,7 +688,10 @@
         },
 
         async descontarStockEscaneado() {
-            if (!this.productoEscaneadoActual) return;
+            if (!this.productoEscaneadoActual || this.rol !== 'Administrador') {
+                this.mostrarToast('Solo el administrador puede descontar stock.', 'warning');
+                return;
+            }
 
             let stockActual = parseInt(this.productoEscaneadoActual.stock_pz, 10);
             if (stockActual <= 0) {
@@ -547,13 +700,18 @@
             }
 
             this.productoEscaneadoActual.stock_pz = stockActual - 1;
+            const indiceLocal = this.inventario.findIndex(item => item.id === this.productoEscaneadoActual.id);
+            if (indiceLocal >= 0) {
+                this.inventario[indiceLocal].stock_pz = this.productoEscaneadoActual.stock_pz;
+            }
 
             try {
-                await fetch('/api/productos', {
+                const res = await fetch('/api/productos', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(this.productoEscaneadoActual)
                 });
+                if (!res.ok) throw new Error('No se pudo actualizar el stock');
 
                 this.registrarBitacora('Salida de Stock', `Descontada 1 pz de ${this.productoEscaneadoActual.id}. Quedan: ${this.productoEscaneadoActual.stock_pz} pz`);
                 this.mostrarDetallesEscaneo(this.productoEscaneadoActual);
@@ -561,7 +719,9 @@
                 this.cargarDatos();
 
             } catch (e) {
-                this.mostrarToast('Error al actualizar stock', 'danger');
+                this.guardarRespaldoLocal();
+                this.renderizarTodo();
+                this.mostrarToast('Stock guardado en modo local; se sincronizará después.', 'warning');
             }
         },
 
@@ -574,6 +734,10 @@
 
         /* ---------- ELIMINACIÓN DEFINITIVA ---------- */
         async eliminarProducto(id) {
+            if (this.rol !== 'Administrador') {
+                this.mostrarToast('Solo el administrador puede eliminar registros.', 'warning');
+                return;
+            }
             if (!confirm(`¿Estás seguro de eliminar definitivamente el registro ${id}?`)) return;
 
             try {
@@ -589,12 +753,20 @@
                 this.renderizarTodo();
 
             } catch (err) {
-                this.mostrarToast('Error al eliminar producto', 'danger');
+                this.inventario = this.inventario.filter(item => item.id !== id);
+                this.registrarBitacora('Eliminación local', `Registro ${id} eliminado del respaldo local.`);
+                this.guardarRespaldoLocal();
+                this.renderizarTodo();
+                this.mostrarToast('Eliminado del respaldo local; se sincronizará después.', 'warning');
             }
         },
 
         /* ---------- EDICIÓN ---------- */
         abrirModalEditar(id) {
+            if (this.rol !== 'Administrador') {
+                this.mostrarToast('Solo el administrador puede editar registros.', 'warning');
+                return;
+            }
             const item = this.inventario.find(i => i.id === id);
             if (!item) return;
 
@@ -610,6 +782,10 @@
         },
 
         async guardarEdicionProducto() {
+            if (this.rol !== 'Administrador') {
+                this.mostrarToast('Solo el administrador puede guardar ediciones.', 'warning');
+                return;
+            }
             const id = document.getElementById('edit-id').value;
             const itemOriginal = this.inventario.find(i => i.id === id);
 
@@ -625,12 +801,18 @@
                 tipo: document.getElementById('edit-tipo').value
             };
 
+            if (!editado.nombre_producto || !editado.medidas || !editado.color || !editado.composicion || Number.isNaN(editado.stock_pz) || editado.stock_pz < 0) {
+                this.mostrarToast('Completa correctamente todos los campos.', 'warning');
+                return;
+            }
+
             try {
-                await fetch('/api/productos', {
+                const res = await fetch('/api/productos', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(editado)
                 });
+                if (!res.ok) throw new Error('No se pudo guardar la edición');
 
                 document.getElementById('modal-editar').classList.remove('active');
                 this.registrarBitacora('Edición de Producto', `Actualizados datos de ${id}`);
@@ -638,7 +820,13 @@
                 this.cargarDatos();
 
             } catch (e) {
-                this.mostrarToast('Error al guardar edición', 'danger');
+                const indiceLocal = this.inventario.findIndex(item => item.id === id);
+                if (indiceLocal >= 0) this.inventario[indiceLocal] = editado;
+                document.getElementById('modal-editar').classList.remove('active');
+                this.registrarBitacora('Edición local', `Actualizados datos de ${id} en el respaldo local.`);
+                this.guardarRespaldoLocal();
+                this.renderizarTodo();
+                this.mostrarToast('Edición guardada en modo local.', 'warning');
             }
         },
 
@@ -653,6 +841,7 @@
             };
 
             this.bitacora.unshift(nuevoRegistro);
+            this.guardarRespaldoLocal();
             this.sincronizarConBackend();
             this.renderizarBitacora();
             this.renderizarRecientesDashboard();
