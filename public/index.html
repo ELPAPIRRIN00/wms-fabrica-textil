@@ -431,6 +431,32 @@
         </div>
     </div>
 
+    <!-- Modal Detalle QR por Producto -->
+    <div id="modal-qr-detalle" class="modal-overlay">
+        <div class="modal-box qr-detail-box">
+            <div class="modal-heading">
+                <div>
+                    <span class="badge badge-info">Etiqueta de producto</span>
+                    <h3 id="qr-detail-title">Producto</h3>
+                </div>
+                <button type="button" class="btn-icon" id="btn-cerrar-qr-detalle" aria-label="Cerrar detalle QR">
+                    <i class="ph ph-x"></i>
+                </button>
+            </div>
+            <div id="qr-detail-code" class="qr-box qr-detail-code"></div>
+            <p id="qr-detail-id" class="qr-detail-id"></p>
+            <div id="qr-detail-meta" class="qr-detail-meta"></div>
+            <div class="modal-actions">
+                <button type="button" class="btn btn-outline" id="btn-descargar-qr-detalle">
+                    <i class="ph ph-download-simple"></i> Descargar QR
+                </button>
+                <button type="button" class="btn btn-primary" id="btn-imprimir-qr-detalle">
+                    <i class="ph ph-printer"></i> Imprimir etiqueta
+                </button>
+            </div>
+        </div>
+    </div>
+
     <!-- Toast Notifications -->
     <div id="toast-container" class="toast-container"></div>
 

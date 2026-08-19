@@ -23,10 +23,10 @@ let fallbackBitacora = [
 ];
 
 // Pool de conexión a PostgreSQL
-const pool = new Pool({
+const pool = process.env.DATABASE_URL ? new Pool({
     connectionString: process.env.DATABASE_URL,
-    ssl: process.env.DATABASE_URL ? { rejectUnauthorized: false } : false
-});
+    ssl: { rejectUnauthorized: false }
+}) : null;
 
 // Inicialización de la Base de Datos PostgreSQL
 const initDB = async () => {
@@ -53,14 +53,35 @@ const initDB = async () => {
                 bodega VARCHAR(50),
                 detalle TEXT
             );
+
+            ALTER TABLE inventario ADD COLUMN IF NOT EXISTS nombre_producto VARCHAR(150);
+            ALTER TABLE inventario ADD COLUMN IF NOT EXISTS medidas VARCHAR(50);
+            ALTER TABLE inventario ADD COLUMN IF NOT EXISTS stock_pz INT DEFAULT 0;
+            ALTER TABLE inventario ADD COLUMN IF NOT EXISTS tipo VARCHAR(20);
+            ALTER TABLE inventario ADD COLUMN IF NOT EXISTS tela VARCHAR(100);
+            ALTER TABLE inventario ADD COLUMN IF NOT EXISTS presentacion VARCHAR(50);
+            ALTER TABLE inventario ADD COLUMN IF NOT EXISTS metros NUMERIC(10,2);
+            ALTER TABLE inventario ADD COLUMN IF NOT EXISTS peso NUMERIC(10,2);
+
+            UPDATE inventario
+            SET nombre_producto = COALESCE(NULLIF(nombre_producto, ''), tela, 'Producto sin nombre'),
+                medidas = COALESCE(NULLIF(medidas, ''), 'N/A'),
+                stock_pz = COALESCE(NULLIF(stock_pz, 0), GREATEST(COALESCE(metros, 0)::INT, 0)),
+                tipo = COALESCE(NULLIF(tipo, ''), UPPER(COALESCE(presentacion, 'ROLLO')))
+            WHERE nombre_producto IS NULL
+               OR nombre_producto = ''
+               OR medidas IS NULL
+               OR stock_pz IS NULL
+               OR tipo IS NULL
+               OR tipo = '';
         `);
 
         const resInventario = await pool.query('SELECT COUNT(*) FROM inventario');
         if (parseInt(resInventario.rows[0].count, 10) === 0) {
             for (const item of fallbackInventario) {
                 await pool.query(`
-                    INSERT INTO inventario (id, nombre_producto, medidas, stock_pz, color, composicion, tipo, bodega, fecha, estado)
-                    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+                    INSERT INTO inventario (id, nombre_producto, medidas, stock_pz, color, composicion, tipo, bodega, fecha, estado, tela, presentacion, metros, peso)
+                    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $2, $7, $4, 0)
                 `, [item.id, item.nombre_producto, item.medidas, item.stock_pz, item.color, item.composicion, item.tipo, item.bodega, item.fecha, item.estado]);
             }
         }
@@ -79,10 +100,6 @@ const initDB = async () => {
     }
 };
 
-if (process.env.DATABASE_URL) {
-    initDB();
-}
-
 // Manejo centralizado de errores
 const handleError = (err, res) => {
     console.error('Error en servidor:', err);
@@ -96,7 +113,7 @@ const handleError = (err, res) => {
 // 1. Obtener todos los productos del inventario
 app.get('/api/productos', async (req, res) => {
     try {
-        if (process.env.DATABASE_URL) {
+        if (pool) {
             const result = await pool.query('SELECT * FROM inventario ORDER BY fecha DESC');
             return res.json(result.rows);
         }
@@ -112,7 +129,7 @@ app.get('/api/productos/:id', async (req, res) => {
         const { id } = req.params;
         const cleanId = id.trim();
 
-        if (process.env.DATABASE_URL) {
+        if (pool) {
             const result = await pool.query('SELECT * FROM inventario WHERE id = $1', [cleanId]);
             if (result.rows.length === 0) {
                 return res.status(404).json({ status: 'error', message: 'Producto no encontrado o fue eliminado.' });
@@ -142,10 +159,10 @@ app.post('/api/productos', async (req, res) => {
         const fechaReg = fecha || new Date().toLocaleString();
         const estReg = estado || 'Activo';
 
-        if (process.env.DATABASE_URL) {
+        if (pool) {
             await pool.query(`
-                INSERT INTO inventario (id, nombre_producto, medidas, stock_pz, color, composicion, tipo, bodega, fecha, estado)
-                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+                INSERT INTO inventario (id, nombre_producto, medidas, stock_pz, color, composicion, tipo, bodega, fecha, estado, tela, presentacion, metros, peso)
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $2, $7, $4, 0)
                 ON CONFLICT (id) DO UPDATE SET
                     nombre_producto = EXCLUDED.nombre_producto,
                     medidas = EXCLUDED.medidas,
@@ -155,7 +172,11 @@ app.post('/api/productos', async (req, res) => {
                     tipo = EXCLUDED.tipo,
                     bodega = EXCLUDED.bodega,
                     fecha = EXCLUDED.fecha,
-                    estado = EXCLUDED.estado
+                        estado = EXCLUDED.estado,
+                        tela = EXCLUDED.tela,
+                        presentacion = EXCLUDED.presentacion,
+                        metros = EXCLUDED.metros,
+                        peso = EXCLUDED.peso
             `, [id, nombre_producto, medidas, parseInt(stock_pz, 10), color, composicion, tipo, bodega || 1, fechaReg, estReg]);
         } else {
             const index = fallbackInventario.findIndex(item => item.id === id);
@@ -179,7 +200,7 @@ app.delete('/api/productos/:id', async (req, res) => {
         const { id } = req.params;
         const cleanId = id.trim();
 
-        if (process.env.DATABASE_URL) {
+        if (pool) {
             const result = await pool.query('DELETE FROM inventario WHERE id = $1 RETURNING *', [cleanId]);
             if (result.rowCount === 0) {
                 return res.status(404).json({ status: 'error', message: 'El producto a eliminar no existe.' });
@@ -201,7 +222,7 @@ app.delete('/api/productos/:id', async (req, res) => {
 // 5. Obtener bitácora
 app.get('/api/bitacora', async (req, res) => {
     try {
-        if (process.env.DATABASE_URL) {
+        if (pool) {
             const result = await pool.query('SELECT * FROM bitacora ORDER BY id DESC LIMIT 100');
             return res.json(result.rows);
         }
@@ -213,7 +234,7 @@ app.get('/api/bitacora', async (req, res) => {
 
 // 6. Sincronización completa masiva
 app.post('/api/sincronizar', async (req, res) => {
-    if (!process.env.DATABASE_URL) {
+    if (!pool) {
         const { inventario: inv, bitacora: bit } = req.body;
         if (Array.isArray(inv)) fallbackInventario = inv;
         if (Array.isArray(bit)) fallbackBitacora = bit;
@@ -230,9 +251,9 @@ app.post('/api/sincronizar', async (req, res) => {
         if (Array.isArray(inv)) {
             for (const item of inv) {
                 await client.query(`
-                    INSERT INTO inventario (id, nombre_producto, medidas, stock_pz, color, composicion, tipo, bodega, fecha, estado)
-                    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
-                `, [item.id, item.nombre_producto || item.tela, item.medidas || 'N/A', item.stock_pz || item.metros || 0, item.color || '', item.composicion || '', item.tipo || item.presentacion || 'ROLLO', item.bodega || 1, item.fecha || new Date().toLocaleString(), item.estado || 'Activo']);
+                    INSERT INTO inventario (id, nombre_producto, medidas, stock_pz, color, composicion, tipo, bodega, fecha, estado, tela, presentacion, metros, peso)
+                    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $2, $7, $4, $11)
+                `, [item.id, item.nombre_producto || item.tela, item.medidas || 'N/A', item.stock_pz || item.metros || 0, item.color || '', item.composicion || '', item.tipo || item.presentacion || 'ROLLO', item.bodega || 1, item.fecha || new Date().toLocaleString(), item.estado || 'Activo', item.peso || 0]);
             }
         }
 
@@ -262,6 +283,14 @@ app.get('*', (req, res) => {
 });
 
 // Iniciar Servidor
-app.listen(PORT, () => {
-    console.log(`🚀 Servidor WMS Textil H.A.M. Poo en línea en http://localhost:${PORT}`);
+const iniciarServidor = async () => {
+    if (pool) await initDB();
+    app.listen(PORT, () => {
+        console.log(`🚀 Servidor WMS Textil H.A.M. Poo en línea en http://localhost:${PORT}`);
+    });
+};
+
+iniciarServidor().catch((err) => {
+    console.error('❌ No se pudo iniciar el servidor WMS:', err.message);
+    process.exitCode = 1;
 });

@@ -15,6 +15,7 @@
         vistaActual: 'dashboard',
         chartInstancia: null,
         productoEscaneadoActual: null,
+        productoQRActual: null,
         html5QrcodeScanner: null,
         inventario: [],
         bitacora: [],
@@ -297,6 +298,7 @@
                 const button = e.target.closest('[data-action][data-id]');
                 if (!button) return;
                 const id = button.dataset.id;
+                if (button.dataset.action === 'qr') this.abrirDetalleQR(id);
                 if (button.dataset.action === 'edit') this.abrirModalEditar(id);
                 if (button.dataset.action === 'delete') this.eliminarProducto(id);
             });
@@ -306,6 +308,11 @@
 
             // Botón Imprimir QR
             document.getElementById('btn-imprimir-qr').addEventListener('click', () => this.imprimirEtiquetaQR());
+            document.getElementById('btn-cerrar-qr-detalle').addEventListener('click', () => {
+                document.getElementById('modal-qr-detalle').classList.remove('active');
+            });
+            document.getElementById('btn-descargar-qr-detalle').addEventListener('click', () => this.descargarQRDetalle());
+            document.getElementById('btn-imprimir-qr-detalle').addEventListener('click', () => this.imprimirQRDetalle());
 
             // Control Escáner
             document.getElementById('btn-start-scanner').addEventListener('click', () => this.iniciarCamaraScanner());
@@ -405,9 +412,10 @@
 
             tbody.innerHTML = filtrados.map(item => {
                 const accionesAdmin = this.rol === 'Administrador' ? `
+                    <button class="btn-icon" title="Ver QR" data-action="qr" data-id="${item.id}"><i class="ph ph-qr-code"></i></button>
                     <button class="btn-icon" title="Editar" data-action="edit" data-id="${item.id}"><i class="ph ph-pencil"></i></button>
                     <button class="btn-icon danger" title="Eliminar" data-action="delete" data-id="${item.id}"><i class="ph ph-trash"></i></button>
-                ` : '<span class="badge badge-info">Solo lectura</span>';
+                ` : '<button class="btn-icon" title="Ver QR" data-action="qr" data-id="' + item.id + '"><i class="ph ph-qr-code"></i></button>';
 
                 return `
                 <tr>
@@ -556,14 +564,90 @@
             document.getElementById('btn-imprimir-qr').removeAttribute('disabled');
         },
 
-        imprimirEtiquetaQR() {
-            const qrCanvas = document.querySelector('#qrcode canvas');
-            if (!qrCanvas) {
-                this.mostrarToast('Genera un QR antes de imprimir', 'warning');
+        abrirDetalleQR(id) {
+            const producto = this.inventario.find(item => item.id === id);
+            if (!producto) {
+                this.mostrarToast('No se encontró el producto para generar su QR.', 'warning');
+                return;
+            }
+            if (Number(producto.bodega) !== this.bodegaActiva) {
+                this.mostrarToast(`El producto pertenece a Bodega ${producto.bodega}.`, 'warning');
+                return;
+            }
+            if (typeof QRCode === 'undefined') {
+                this.mostrarToast('No se cargó la biblioteca de códigos QR.', 'danger');
                 return;
             }
 
-            const qrDataUrl = qrCanvas.toDataURL("image/png");
+            this.productoQRActual = producto;
+            const container = document.getElementById('qr-detail-code');
+            container.innerHTML = '';
+            new QRCode(container, {
+                text: producto.id,
+                width: 190,
+                height: 190,
+                colorDark: '#111827',
+                colorLight: '#ffffff',
+                correctLevel: QRCode.CorrectLevel.H
+            });
+            document.getElementById('qr-detail-title').textContent = producto.nombre_producto || producto.tela || producto.id;
+            document.getElementById('qr-detail-id').textContent = producto.id;
+            document.getElementById('qr-detail-meta').innerHTML = `
+                <span><strong>Stock:</strong> ${producto.stock_pz ?? producto.metros ?? 0} pz</span>
+                <span><strong>Color:</strong> ${producto.color || 'N/A'}</span>
+                <span><strong>Tipo:</strong> ${producto.tipo || producto.presentacion || 'N/A'}</span>
+                <span><strong>Bodega:</strong> ${producto.bodega}</span>
+            `;
+            document.getElementById('modal-qr-detalle').classList.add('active');
+        },
+
+        descargarQRDetalle() {
+            if (!this.productoQRActual) return;
+            const dataUrl = this.obtenerDatosQR('#qr-detail-code');
+            if (!dataUrl) {
+                this.mostrarToast('El QR todavía no está listo.', 'warning');
+                return;
+            }
+            const link = document.createElement('a');
+            link.href = dataUrl;
+            link.download = `QR_${this.productoQRActual.id}.png`;
+            document.body.appendChild(link);
+            link.click();
+            link.remove();
+        },
+
+        imprimirQRDetalle() {
+            if (!this.productoQRActual) return;
+            const dataUrl = this.obtenerDatosQR('#qr-detail-code');
+            if (!dataUrl) {
+                this.mostrarToast('El QR todavía no está listo.', 'warning');
+                return;
+            }
+            const printWindow = window.open('', '_blank');
+            if (!printWindow) {
+                this.mostrarToast('Permite ventanas emergentes para imprimir la etiqueta.', 'warning');
+                return;
+            }
+            const producto = this.productoQRActual;
+            printWindow.document.write(`<!doctype html><html lang="es"><head><meta charset="utf-8"><title>QR ${producto.id}</title><style>body{font-family:Arial,sans-serif;text-align:center;padding:24px}.ticket{display:inline-block;border:2px dashed #111;padding:18px;width:240px}img{width:190px;height:190px}h2{font-size:18px}p{margin:6px 0}</style></head><body onload="window.print();window.close()"><div class="ticket"><h2>${producto.nombre_producto || producto.tela || producto.id}</h2><img src="${dataUrl}" alt="QR ${producto.id}"><p><strong>${producto.id}</strong></p><p>Bodega ${producto.bodega}</p></div></body></html>`);
+            printWindow.document.close();
+        },
+
+        obtenerDatosQR(selector) {
+            const container = document.querySelector(selector);
+            if (!container) return null;
+            const canvas = container.querySelector('canvas');
+            if (canvas) return canvas.toDataURL('image/png');
+            const image = container.querySelector('img');
+            return image?.src || null;
+        },
+
+        imprimirEtiquetaQR() {
+            const qrDataUrl = this.obtenerDatosQR('#qrcode');
+            if (!qrDataUrl) {
+                this.mostrarToast('Genera un QR antes de imprimir', 'warning');
+                return;
+            }
             const printWindow = window.open('', '_blank');
             if (!printWindow) {
                 this.mostrarToast('El navegador bloqueó la ventana de impresión. Permite ventanas emergentes.', 'warning');
