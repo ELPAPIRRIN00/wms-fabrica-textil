@@ -13,13 +13,13 @@ app.use(express.static(path.join(__dirname, 'public')));
 
 // Datos iniciales de respaldo (Fallback local si no hay DB activa)
 let fallbackInventario = [
-    { id: 'HAM-1001', nombre_producto: 'Toalla Facial Hilaza', medidas: '40x70', stock_pz: 120, color: 'Blanco Óptico', composicion: '100% Algodón', tipo: 'ROLLO', bodega: 1, fecha: new Date().toLocaleString(), estado: 'Activo' },
-    { id: 'HAM-1002', nombre_producto: 'Sabana Algodón Peinado', medidas: '160x200', stock_pz: 80, color: 'Negro Intenso', composicion: '100% Algodón Peinado', tipo: 'PAQUETE', bodega: 1, fecha: new Date().toLocaleString(), estado: 'Activo' },
-    { id: 'HAM-1003', nombre_producto: 'Tela Poliéster Deportivo', medidas: '150x300', stock_pz: 200, color: 'Azul Marino', composicion: '100% Poliéster', tipo: 'BULTO', bodega: 2, fecha: new Date().toLocaleString(), estado: 'Activo' }
+    { id: 'HAM-1001', nombre_producto: 'Toalla Facial Hilaza', medidas: '40x70', stock_pz: 120, color: 'Blanco Óptico', composicion: '100% Algodón', tipo: 'ROLLO', bodega: 1, fecha: new Date().toLocaleString('es-MX'), estado: 'Activo' },
+    { id: 'HAM-1002', nombre_producto: 'Sabana Algodón Peinado', medidas: '160x200', stock_pz: 80, color: 'Negro Intenso', composicion: '100% Algodón Peinado', tipo: 'PAQUETE', bodega: 1, fecha: new Date().toLocaleString('es-MX'), estado: 'Activo' },
+    { id: 'HAM-1003', nombre_producto: 'Tela Poliéster Deportivo', medidas: '150x300', stock_pz: 200, color: 'Azul Marino', composicion: '100% Poliéster', tipo: 'BULTO', bodega: 2, fecha: new Date().toLocaleString('es-MX'), estado: 'Activo' }
 ];
 
 let fallbackBitacora = [
-    { id: 1, fecha: new Date().toLocaleString(), usuario: 'Sistema', accion: 'Inicialización', bodega: '-', detalle: 'Servidor WMS iniciado.' }
+    { id: 1, fecha: new Date().toLocaleString('es-MX'), usuario: 'Sistema', accion: 'Inicialización', bodega: '-', detalle: 'Servidor WMS iniciado.' }
 ];
 
 // Pool de conexión a PostgreSQL
@@ -30,6 +30,7 @@ const pool = process.env.DATABASE_URL ? new Pool({
 
 // Inicialización de la Base de Datos PostgreSQL
 const initDB = async () => {
+    if (!pool) return;
     try {
         await pool.query(`
             CREATE TABLE IF NOT EXISTS inventario (
@@ -39,10 +40,14 @@ const initDB = async () => {
                 stock_pz INT DEFAULT 0,
                 color VARCHAR(50),
                 composicion VARCHAR(100),
-                tipo VARCHAR(20) CHECK (tipo IN ('BULTO', 'PAQUETE', 'ROLLO')),
+                tipo VARCHAR(20) DEFAULT 'ROLLO',
                 bodega INT DEFAULT 1,
                 fecha VARCHAR(100),
-                estado VARCHAR(20) DEFAULT 'Activo'
+                estado VARCHAR(20) DEFAULT 'Activo',
+                tela VARCHAR(100),
+                presentacion VARCHAR(50),
+                metros NUMERIC(10,2),
+                peso NUMERIC(10,2)
             );
 
             CREATE TABLE IF NOT EXISTS bitacora (
@@ -53,55 +58,23 @@ const initDB = async () => {
                 bodega VARCHAR(50),
                 detalle TEXT
             );
-
-            ALTER TABLE inventario ADD COLUMN IF NOT EXISTS nombre_producto VARCHAR(150);
-            ALTER TABLE inventario ADD COLUMN IF NOT EXISTS medidas VARCHAR(50);
-            ALTER TABLE inventario ADD COLUMN IF NOT EXISTS stock_pz INT DEFAULT 0;
-            ALTER TABLE inventario ADD COLUMN IF NOT EXISTS tipo VARCHAR(20);
-            ALTER TABLE inventario ADD COLUMN IF NOT EXISTS tela VARCHAR(100);
-            ALTER TABLE inventario ADD COLUMN IF NOT EXISTS presentacion VARCHAR(50);
-            ALTER TABLE inventario ADD COLUMN IF NOT EXISTS metros NUMERIC(10,2);
-            ALTER TABLE inventario ADD COLUMN IF NOT EXISTS peso NUMERIC(10,2);
-            ALTER TABLE inventario DROP CONSTRAINT IF EXISTS inventario_tipo_check;
-
-            ALTER TABLE inventario ALTER COLUMN tela DROP NOT NULL;
-            ALTER TABLE inventario ALTER COLUMN presentacion DROP NOT NULL;
-            ALTER TABLE inventario ALTER COLUMN metros DROP NOT NULL;
-            ALTER TABLE inventario ALTER COLUMN peso DROP NOT NULL;
-
-            DO $migration$
-            DECLARE constraint_record RECORD;
-            BEGIN
-                FOR constraint_record IN
-                    SELECT conname
-                    FROM pg_constraint
-                    WHERE conrelid = 'inventario'::regclass
-                      AND contype = 'c'
-                      AND pg_get_constraintdef(oid) ILIKE '%tipo%'
-                LOOP
-                    EXECUTE format('ALTER TABLE inventario DROP CONSTRAINT IF EXISTS %I', constraint_record.conname);
-                END LOOP;
-            END
-            $migration$;
-
-            UPDATE inventario
-            SET nombre_producto = COALESCE(NULLIF(nombre_producto, ''), tela, 'Producto sin nombre'),
-                medidas = COALESCE(NULLIF(medidas, ''), 'N/A'),
-                stock_pz = COALESCE(NULLIF(stock_pz, 0), GREATEST(COALESCE(metros, 0)::INT, 0)),
-                tipo = COALESCE(NULLIF(tipo, ''), UPPER(COALESCE(presentacion, 'ROLLO')))
-            WHERE nombre_producto IS NULL
-               OR nombre_producto = ''
-               OR medidas IS NULL
-               OR stock_pz IS NULL
-               OR tipo IS NULL
-               OR tipo = '';
-
-            UPDATE inventario SET tipo = 'ROLLO'
-            WHERE tipo NOT IN ('BULTO', 'PAQUETE', 'ROLLO');
-
-            ALTER TABLE inventario ADD CONSTRAINT inventario_tipo_check
-                CHECK (tipo IN ('BULTO', 'PAQUETE', 'ROLLO'));
         `);
+
+        // Garantizar existencia de columnas en migraciones de esquemas anteriores
+        const alterQueries = [
+            "ALTER TABLE inventario ADD COLUMN IF NOT EXISTS nombre_producto VARCHAR(150)",
+            "ALTER TABLE inventario ADD COLUMN IF NOT EXISTS medidas VARCHAR(50)",
+            "ALTER TABLE inventario ADD COLUMN IF NOT EXISTS stock_pz INT DEFAULT 0",
+            "ALTER TABLE inventario ADD COLUMN IF NOT EXISTS tipo VARCHAR(20)",
+            "ALTER TABLE inventario ADD COLUMN IF NOT EXISTS tela VARCHAR(100)",
+            "ALTER TABLE inventario ADD COLUMN IF NOT EXISTS presentacion VARCHAR(50)",
+            "ALTER TABLE inventario ADD COLUMN IF NOT EXISTS metros NUMERIC(10,2)",
+            "ALTER TABLE inventario ADD COLUMN IF NOT EXISTS peso NUMERIC(10,2)"
+        ];
+
+        for (const q of alterQueries) {
+            try { await pool.query(q); } catch (e) { /* Columna ya existente */ }
+        }
 
         const resInventario = await pool.query('SELECT COUNT(*) FROM inventario');
         if (parseInt(resInventario.rows[0].count, 10) === 0) {
@@ -109,6 +82,7 @@ const initDB = async () => {
                 await pool.query(`
                     INSERT INTO inventario (id, nombre_producto, medidas, stock_pz, color, composicion, tipo, bodega, fecha, estado, tela, presentacion, metros, peso)
                     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $2, $7, $4, 0)
+                    ON CONFLICT (id) DO NOTHING
                 `, [item.id, item.nombre_producto, item.medidas, item.stock_pz, item.color, item.composicion, item.tipo, item.bodega, item.fecha, item.estado]);
             }
         }
@@ -118,21 +92,22 @@ const initDB = async () => {
             await pool.query(`
                 INSERT INTO bitacora (fecha, usuario, accion, bodega, detalle)
                 VALUES ($1, 'Sistema', 'Inicialización', '-', 'Base de datos PostgreSQL inicializada con esquema WMS.')
-            `, [new Date().toLocaleString()]);
+            `, [new Date().toLocaleString('es-MX')]);
         }
 
         console.log('✅ Base de datos PostgreSQL estructurada e inicializada correctamente.');
     } catch (err) {
-        console.error('❌ Error al inicializar la base de datos:', err.message);
+        console.error('❌ Error al inicializar la base de datos PostgreSQL:', err.message);
     }
 };
 
 // Manejo centralizado de errores
 const handleError = (err, res) => {
-    console.error('Error en servidor:', err);
-    res.status(500).json({ status: 'error', message: 'Error interno en el servidor WMS' });
+    console.error('❌ Error en servidor WMS:', err.message || err);
+    res.status(500).json({ status: 'error', message: err.message || 'Error interno en el servidor WMS' });
 };
 
+// Healthcheck endpoint
 app.get('/api/health', async (req, res) => {
     if (!pool) return res.json({ status: 'ok', database: 'fallback' });
     try {
@@ -140,12 +115,12 @@ app.get('/api/health', async (req, res) => {
         res.json({ status: 'ok', database: 'connected' });
     } catch (err) {
         console.error('Healthcheck PostgreSQL fallido:', err.message);
-        res.status(503).json({ status: 'error', database: 'unavailable' });
+        res.status(503).json({ status: 'error', database: 'unavailable', error: err.message });
     }
 });
 
 /* =========================================================
- * 🛠️ RUTAS DE LA API REST
+ * 🛠️ RUTAS DE LA API REST (POSTGRESQL REAL-TIME)
  * ========================================================= */
 
 // 1. Obtener todos los productos del inventario
@@ -165,7 +140,7 @@ app.get('/api/productos', async (req, res) => {
 app.get('/api/productos/:id', async (req, res) => {
     try {
         const { id } = req.params;
-        const cleanId = id.trim();
+        const cleanId = String(id).trim();
 
         if (pool) {
             const result = await pool.query('SELECT * FROM inventario WHERE id = $1', [cleanId]);
@@ -191,10 +166,18 @@ app.post('/api/productos', async (req, res) => {
         const { id, nombre_producto, medidas, stock_pz, color, composicion, tipo, bodega, fecha, estado } = req.body;
 
         if (!id || !nombre_producto || stock_pz === undefined || !tipo) {
-            return res.status(400).json({ status: 'error', message: 'Faltan campos obligatorios para el producto.' });
+            return res.status(400).json({ status: 'error', message: 'Faltan campos obligatorios (ID, Nombre, Stock o Tipo).' });
         }
 
-        const fechaReg = fecha || new Date().toLocaleString();
+        const cleanId = String(id).trim();
+        const cleanNombre = String(nombre_producto).trim();
+        const cleanMedidas = String(medidas || 'N/A').trim();
+        const numStock = parseInt(stock_pz, 10) || 0;
+        const cleanColor = String(color || '').trim();
+        const cleanComposicion = String(composicion || '').trim();
+        const cleanTipo = String(tipo || 'ROLLO').toUpperCase().trim();
+        const numBodega = parseInt(bodega, 10) || 1;
+        const fechaReg = fecha || new Date().toLocaleString('es-MX');
         const estReg = estado || 'Activo';
 
         if (pool) {
@@ -210,15 +193,15 @@ app.post('/api/productos', async (req, res) => {
                     tipo = EXCLUDED.tipo,
                     bodega = EXCLUDED.bodega,
                     fecha = EXCLUDED.fecha,
-                        estado = EXCLUDED.estado,
-                        tela = EXCLUDED.tela,
-                        presentacion = EXCLUDED.presentacion,
-                        metros = EXCLUDED.metros,
-                        peso = EXCLUDED.peso
-            `, [id, nombre_producto, medidas, parseInt(stock_pz, 10), color, composicion, tipo, bodega || 1, fechaReg, estReg]);
+                    estado = EXCLUDED.estado,
+                    tela = EXCLUDED.tela,
+                    presentacion = EXCLUDED.presentacion,
+                    metros = EXCLUDED.metros,
+                    peso = EXCLUDED.peso
+            `, [cleanId, cleanNombre, cleanMedidas, numStock, cleanColor, cleanComposicion, cleanTipo, numBodega, fechaReg, estReg]);
         } else {
-            const index = fallbackInventario.findIndex(item => item.id === id);
-            const nuevoObj = { id, nombre_producto, medidas, stock_pz: parseInt(stock_pz, 10), color, composicion, tipo, bodega: bodega || 1, fecha: fechaReg, estado: estReg };
+            const index = fallbackInventario.findIndex(item => item.id === cleanId);
+            const nuevoObj = { id: cleanId, nombre_producto: cleanNombre, medidas: cleanMedidas, stock_pz: numStock, color: cleanColor, composicion: cleanComposicion, tipo: cleanTipo, bodega: numBodega, fecha: fechaReg, estado: estReg };
             if (index >= 0) {
                 fallbackInventario[index] = nuevoObj;
             } else {
@@ -226,34 +209,34 @@ app.post('/api/productos', async (req, res) => {
             }
         }
 
-        res.json({ status: 'ok', message: 'Producto guardado correctamente.' });
+        res.json({ status: 'ok', message: 'Producto guardado correctamente en la Base de Datos.' });
     } catch (err) {
         handleError(err, res);
     }
 });
 
-// 4. Eliminar producto por ID (Eliminación Física)
+// 4. Eliminar producto por ID (Soft delete / Merma)
 app.delete('/api/productos/:id', async (req, res) => {
     try {
         const { id } = req.params;
-        const cleanId = id.trim();
+        const cleanId = String(id).trim();
         const motivo = String(req.body?.motivo || '').trim();
         if (!motivo) {
             return res.status(400).json({ status: 'error', message: 'El motivo de baja es obligatorio.' });
         }
 
         if (pool) {
-            const result = await pool.query("UPDATE inventario SET estado = 'Merma/Defecto' WHERE id = $1 AND estado <> 'Merma/Defecto' RETURNING *", [cleanId]);
+            const result = await pool.query("UPDATE inventario SET estado = 'Merma/Defecto' WHERE id = $1 RETURNING *", [cleanId]);
             if (result.rowCount === 0) {
-                return res.status(404).json({ status: 'error', message: 'El producto no existe o ya está dado de baja.' });
+                return res.status(404).json({ status: 'error', message: 'El producto no existe en la base de datos.' });
             }
         } else {
             const producto = fallbackInventario.find(item => item.id === cleanId);
-            if (!producto || producto.estado === 'Merma/Defecto') return res.status(404).json({ status: 'error', message: 'El producto no fue encontrado.' });
+            if (!producto) return res.status(404).json({ status: 'error', message: 'El producto no fue encontrado.' });
             producto.estado = 'Merma/Defecto';
         }
 
-        res.json({ status: 'ok', message: `Producto ${cleanId} dado de baja; no se borró físicamente.` });
+        res.json({ status: 'ok', message: `Producto ${cleanId} dado de baja correctamente.` });
     } catch (err) {
         handleError(err, res);
     }
@@ -281,7 +264,7 @@ app.post('/api/bitacora', async (req, res) => {
             return res.status(400).json({ status: 'error', message: 'La acción es obligatoria.' });
         }
 
-        const fechaReg = fecha || new Date().toLocaleString();
+        const fechaReg = fecha || new Date().toLocaleString('es-MX');
         const usuarioReg = usuario || 'Sistema';
         const bodegaReg = bodega || '-';
         const detalleReg = detalle || '';
@@ -292,7 +275,7 @@ app.post('/api/bitacora', async (req, res) => {
                 [fechaReg, usuarioReg, accion, bodegaReg, detalleReg]
             );
         } else {
-            fallbackBitacora.unshift({ fecha: fechaReg, usuario: usuarioReg, accion, bodega: bodegaReg, detalle: detalleReg });
+            fallbackBitacora.unshift({ id: Date.now(), fecha: fechaReg, usuario: usuarioReg, accion, bodega: bodegaReg, detalle: detalleReg });
         }
 
         res.json({ status: 'ok', message: 'Entrada de bitácora registrada.' });
@@ -301,7 +284,7 @@ app.post('/api/bitacora', async (req, res) => {
     }
 });
 
-// 6. Sincronización completa masiva
+// 6. Sincronización masiva de respaldo
 app.post('/api/sincronizar', async (req, res) => {
     if (!pool) {
         const { inventario: inv, bitacora: bit } = req.body;
@@ -315,24 +298,32 @@ app.post('/api/sincronizar', async (req, res) => {
         const { inventario: inv, bitacora: bit } = req.body;
 
         await client.query('BEGIN');
-        await client.query('DELETE FROM inventario');
         
-        if (Array.isArray(inv)) {
+        if (Array.isArray(inv) && inv.length > 0) {
             for (const item of inv) {
                 await client.query(`
                     INSERT INTO inventario (id, nombre_producto, medidas, stock_pz, color, composicion, tipo, bodega, fecha, estado, tela, presentacion, metros, peso)
-                    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $2, $7, $4, $11)
-                `, [item.id, item.nombre_producto || item.tela, item.medidas || 'N/A', item.stock_pz || item.metros || 0, item.color || '', item.composicion || '', item.tipo || item.presentacion || 'ROLLO', item.bodega || 1, item.fecha || new Date().toLocaleString(), item.estado || 'Activo', item.peso || 0]);
+                    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $2, $7, $4, 0)
+                    ON CONFLICT (id) DO UPDATE SET
+                        nombre_producto = EXCLUDED.nombre_producto,
+                        medidas = EXCLUDED.medidas,
+                        stock_pz = EXCLUDED.stock_pz,
+                        color = EXCLUDED.color,
+                        composicion = EXCLUDED.composicion,
+                        tipo = EXCLUDED.tipo,
+                        bodega = EXCLUDED.bodega,
+                        fecha = EXCLUDED.fecha,
+                        estado = EXCLUDED.estado
+                `, [item.id, item.nombre_producto || item.tela, item.medidas || 'N/A', item.stock_pz || item.metros || 0, item.color || '', item.composicion || '', item.tipo || item.presentacion || 'ROLLO', item.bodega || 1, item.fecha || new Date().toLocaleString('es-MX'), item.estado || 'Activo']);
             }
         }
 
-        if (Array.isArray(bit)) {
-            await client.query('DELETE FROM bitacora');
+        if (Array.isArray(bit) && bit.length > 0) {
             for (const item of bit) {
                 await client.query(`
                     INSERT INTO bitacora (fecha, usuario, accion, bodega, detalle)
                     VALUES ($1, $2, $3, $4, $5)
-                `, [item.fecha || new Date().toLocaleString(), item.usuario || 'Sistema', item.accion || 'Movimiento', item.bodega || '-', item.detalle || '']);
+                `, [item.fecha || new Date().toLocaleString('es-MX'), item.usuario || 'Sistema', item.accion || 'Movimiento', item.bodega || '-', item.detalle || '']);
             }
         }
 
@@ -355,7 +346,7 @@ app.get('*', (req, res) => {
 const iniciarServidor = async () => {
     if (pool) await initDB();
     app.listen(PORT, () => {
-        console.log(`🚀 Servidor WMS Textil H.A.M. Poo en línea en http://localhost:${PORT}`);
+        console.log(`🚀 Servidor WMS Textil H.A.M. Poo en línea en puerto ${PORT}`);
     });
 };
 

@@ -1,7 +1,7 @@
 /**
  * =========================================================
  * 🧠 H.A.M. POO - WMS Textil (v2.0)
- * Lógica Principal Frontend (Integrado con PostgreSQL & QR por ID)
+ * Lógica Principal Frontend (Integrado con PostgreSQL & Real-Time Sync)
  * =========================================================
  */
 
@@ -20,6 +20,7 @@
         inventario: [],
         bitacora: [],
         useBackend: true,
+        pollingInterval: null,
         gruposAbiertos: {},
         storageKeys: {
             inventarioBodega1: 'ham_wms_inventario_bodega_1',
@@ -37,6 +38,7 @@
         async init() {
             this.iniciarReloj();
             await this.cargarDatos();
+            this.iniciarPolling();
             this.configurarNavegacion();
             this.configurarEventos();
             this.verificarSesion();
@@ -52,6 +54,18 @@
             }, 1000);
         },
 
+        iniciarPolling() {
+            if (this.pollingInterval) clearInterval(this.pollingInterval);
+            this.pollingInterval = setInterval(() => {
+                const modalEditarActivo = document.getElementById('modal-editar')?.classList.contains('active');
+                const modalQRActivo = document.getElementById('modal-qr-detalle')?.classList.contains('active');
+                // Sincronización continua en segundo plano cada 4 segundos si el usuario no está editando
+                if (this.useBackend && !modalEditarActivo && !modalQRActivo) {
+                    this.cargarDatos(true);
+                }
+            }, 4000);
+        },
+
         obtenerFechaActual() {
             return new Date().toLocaleString('es-MX', {
                 year: 'numeric', month: '2-digit', day: '2-digit',
@@ -60,11 +74,12 @@
         },
 
         /* ---------- Conexión con Backend REST ---------- */
-        async cargarDatos() {
+        async cargarDatos(silent = false) {
             try {
+                const timestamp = Date.now();
                 const [resInv, resBit] = await Promise.all([
-                    fetch('/api/productos'),
-                    fetch('/api/bitacora')
+                    fetch(`/api/productos?t=${timestamp}`),
+                    fetch(`/api/bitacora?t=${timestamp}`)
                 ]);
                 if (!resInv.ok || !resBit.ok) throw new Error('API no disponible');
 
@@ -82,10 +97,12 @@
                 this.useBackend = true;
                 this.actualizarStatusBadge(true);
             } catch (err) {
-                console.warn('Servidor offline o sin conexión. Usando respaldo local.', err.message);
-                this.useBackend = false;
-                this.cargarRespaldoLocal();
-                this.actualizarStatusBadge(false);
+                if (!silent) {
+                    console.warn('Servidor offline o sin conexión. Usando respaldo local.', err.message);
+                    this.useBackend = false;
+                    this.cargarRespaldoLocal();
+                    this.actualizarStatusBadge(false);
+                }
             }
 
             this.renderizarTodo();
@@ -163,7 +180,7 @@
         },
 
         productosDeBodegaActiva() {
-            return this.inventario.filter(item => Number(item.bodega) === this.bodegaActiva);
+            return this.inventario.filter(item => Number(item.bodega) === this.bodegaActiva && item.estado !== 'Merma/Defecto');
         },
 
         actualizarStatusBadge(online) {
@@ -174,25 +191,7 @@
                 badge.innerHTML = '<i class="ph ph-circle-wavy-check"></i> PostgreSQL Conectado';
             } else {
                 badge.className = 'badge badge-warning';
-                badge.innerHTML = '<i class="ph ph-warning"></i> Modo Local (Memoria)';
-            }
-        },
-
-        async sincronizarConBackend() {
-            // Solo se usa para recuperar datos offline pendientes,
-            // NUNCA en el flujo normal de operación.
-            if (!this.useBackend) return;
-            try {
-                await fetch('/api/sincronizar', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        inventario: this.inventario,
-                        bitacora: this.bitacora
-                    })
-                });
-            } catch (e) {
-                console.error('Error al sincronizar con backend:', e);
+                badge.innerHTML = '<i class="ph ph-warning"></i> Modo Local (Sin Conexión DB)';
             }
         },
 
@@ -336,7 +335,7 @@
                 document.getElementById('reg-id').value = `HAM-${randomNum}`;
             });
 
-            // Formulario de Registro (En el orden solicitado)
+            // Formulario de Registro
             document.getElementById('form-registro').addEventListener('submit', (e) => {
                 e.preventDefault();
                 this.registrarProducto();
@@ -402,10 +401,11 @@
         },
 
         renderizarKPIs() {
-            const totalItems = this.inventario.length;
-            const totalPiezas = this.inventario.reduce((acc, i) => acc + (parseInt(i.stock_pz, 10) || 0), 0);
-            const bodega1 = this.inventario.filter(i => Number(i.bodega) === 1).length;
-            const bodega2 = this.inventario.filter(i => Number(i.bodega) === 2).length;
+            const activos = this.inventario.filter(i => i.estado !== 'Merma/Defecto');
+            const totalItems = activos.length;
+            const totalPiezas = activos.reduce((acc, i) => acc + (parseInt(i.stock_pz, 10) || 0), 0);
+            const bodega1 = activos.filter(i => Number(i.bodega) === 1).length;
+            const bodega2 = activos.filter(i => Number(i.bodega) === 2).length;
 
             document.getElementById('kpi-total-items').textContent = totalItems;
             document.getElementById('kpi-total-piezas').textContent = `${totalPiezas} pz`;
@@ -553,7 +553,7 @@
             `).join('');
         },
 
-        /* ---------- REGISTRO DE PRODUCTOS EN ORDEN ---------- */
+        /* ---------- REGISTRO DE PRODUCTOS EN POSTGRESQL ---------- */
         async registrarProducto() {
             const id = document.getElementById('reg-id').value.trim();
             const nombre = document.getElementById('reg-nombre').value.trim();
@@ -565,7 +565,7 @@
             const tipo = document.getElementById('reg-tipo').value;
 
             if (!id || !nombre || !medidas || isNaN(stock) || stock < 1 || isNaN(cantidad) || cantidad < 1 || cantidad > 1000 || !color || !composicion) {
-                this.mostrarToast('Por favor completa los campos requeridos', 'warning');
+                this.mostrarToast('Por favor completa todos los campos requeridos', 'warning');
                 return;
             }
 
@@ -581,12 +581,12 @@
                 fecha: this.obtenerFechaActual(),
                 estado: 'Activo'
             }));
-            if (productos.some(producto => this.inventario.some(item => item.id === producto.id))) {
-                this.mostrarToast('Uno de los IDs ya existe. Genera una referencia nueva.', 'warning');
+
+            if (productos.some(producto => this.inventario.some(item => item.id === producto.id && item.estado !== 'Merma/Defecto'))) {
+                this.mostrarToast('Uno de los IDs ya existe en el inventario activo.', 'warning');
                 return;
             }
 
-            // Guardar en backend REST
             try {
                 for (const producto of productos) {
                     const res = await fetch('/api/productos', {
@@ -594,24 +594,30 @@
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify(producto)
                     });
-                    if (!res.ok) throw new Error('Error guardando en base de datos');
+                    if (!res.ok) {
+                        const errData = await res.json().catch(() => ({}));
+                        throw new Error(errData.message || `Error HTTP ${res.status} guardando en servidor`);
+                    }
                 }
 
-                await this.registrarBitacora('Ingreso de Producto', `Registradas ${cantidad} piezas de ${nombre} (${stock} pz c/u) - Tipo ${tipo}`);
+                await this.registrarBitacora('Ingreso de Producto', `Registradas ${cantidad} pieza(s) de ${nombre} (${stock} pz c/u) - Tipo ${tipo}`);
                 this.generarEtiquetasQR(productos);
-                this.mostrarToast(`${cantidad} producto(s) registrado(s) correctamente`, 'success');
+                this.mostrarToast(`${cantidad} producto(s) guardado(s) en PostgreSQL correctamente`, 'success');
 
-                // Recargar datos desde la DB para mantener sincronización
+                // Limpiar formulario excepto familia de producto
+                document.getElementById('reg-id').value = '';
+                document.getElementById('reg-nombre').value = '';
+                document.getElementById('reg-medidas').value = '';
+                document.getElementById('reg-stock').value = '';
+                document.getElementById('reg-color').value = '';
+                document.getElementById('reg-composicion').value = '';
+
+                // Recargar datos desde la DB inmediatamente
                 await this.cargarDatos();
 
             } catch (err) {
-                this.inventario.unshift(...productos);
-                this.poblarFamiliasProducto();
-                this.registrarBitacora('Ingreso local', `Registradas ${cantidad} piezas de ${nombre} (${stock} pz c/u)`);
-                this.generarEtiquetasQR(productos);
-                this.renderizarTodo();
-                this.guardarRespaldoLocal();
-                this.mostrarToast('Guardado en modo local; se sincronizará al volver el servidor.', 'warning');
+                console.error('Error al registrar producto:', err);
+                this.mostrarToast(`❌ No se pudo guardar en PostgreSQL: ${err.message}`, 'danger');
             }
         },
 
@@ -624,7 +630,6 @@
             }
             box.innerHTML = '';
 
-            // EL CÓDIGO QR GUARDA ÚNICAMENTE EL STRING DEL ID
             new QRCode(box, {
                 text: idProducto,
                 width: 140,
@@ -792,7 +797,6 @@
             }
         },
 
-        // PROCESAMIENTO Y VALIDACIÓN EN BASE DE DATOS
         async procesarLecturaQR(codigoEscaneado) {
             const cleanId = codigoEscaneado.trim();
             const productoLocal = this.inventario.find(item => item.id === cleanId);
@@ -803,17 +807,20 @@
             }
 
             try {
-                // Consulta directa a PostgreSQL para verificar existencia real
                 const res = await fetch(`/api/productos/${encodeURIComponent(cleanId)}`);
 
                 if (!res.ok) {
-                    // SI FUE ELIMINADO MUESTRA ALERTA Y LIMPIA LA PANTALLA
                     this.mostrarToast(`⚠️ El producto (${cleanId}) ha sido ELIMINADO de la Base de Datos.`, 'danger');
                     this.ocultarDetallesEscaneo();
                     return;
                 }
 
                 const producto = await res.json();
+                if (producto.estado === 'Merma/Defecto') {
+                    this.mostrarToast(`⚠️ El producto (${cleanId}) se encuentra en estado MERMA/DEFECTO.`, 'danger');
+                    this.ocultarDetallesEscaneo();
+                    return;
+                }
                 if (Number(producto.bodega) !== this.bodegaActiva) {
                     this.mostrarToast(`El producto pertenece a Bodega ${producto.bodega}.`, 'warning');
                     this.ocultarDetallesEscaneo();
@@ -861,29 +868,29 @@
                 return;
             }
 
-            this.productoEscaneadoActual.stock_pz = stockActual - 1;
-            const indiceLocal = this.inventario.findIndex(item => item.id === this.productoEscaneadoActual.id);
-            if (indiceLocal >= 0) {
-                this.inventario[indiceLocal].stock_pz = this.productoEscaneadoActual.stock_pz;
-            }
+            const productoActualizado = {
+                ...this.productoEscaneadoActual,
+                stock_pz: stockActual - 1
+            };
 
             try {
                 const res = await fetch('/api/productos', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(this.productoEscaneadoActual)
+                    body: JSON.stringify(productoActualizado)
                 });
-                if (!res.ok) throw new Error('No se pudo actualizar el stock');
+                if (!res.ok) {
+                    const errData = await res.json().catch(() => ({}));
+                    throw new Error(errData.message || 'No se pudo actualizar el stock');
+                }
 
-                this.registrarBitacora('Salida de Stock', `Descontada 1 pz de ${this.productoEscaneadoActual.id}. Quedan: ${this.productoEscaneadoActual.stock_pz} pz`);
-                this.mostrarDetallesEscaneo(this.productoEscaneadoActual);
+                await this.registrarBitacora('Salida de Stock', `Descontada 1 pz de ${productoActualizado.id}. Quedan: ${productoActualizado.stock_pz} pz`);
+                this.mostrarDetallesEscaneo(productoActualizado);
                 this.mostrarToast('Stock actualizado (-1 pz)', 'success');
-                this.cargarDatos();
+                await this.cargarDatos();
 
             } catch (e) {
-                this.guardarRespaldoLocal();
-                this.renderizarTodo();
-                this.mostrarToast('Stock guardado en modo local; se sincronizará después.', 'warning');
+                this.mostrarToast(`❌ Error al actualizar en PostgreSQL: ${e.message}`, 'danger');
             }
         },
 
@@ -894,7 +901,7 @@
             this.ocultarDetallesEscaneo();
         },
 
-        /* ---------- ELIMINACIÓN DEFINITIVA ---------- */
+        /* ---------- ELIMINACIÓN DE PRODUCTO ---------- */
         async eliminarProducto(id) {
             if (this.rol !== 'Administrador') {
                 this.mostrarToast('Solo el administrador puede eliminar registros.', 'warning');
@@ -913,21 +920,18 @@
                     body: JSON.stringify({ motivo: motivo.trim(), usuario: this.usuario })
                 });
 
-                if (!res.ok) throw new Error('No se pudo eliminar');
+                if (!res.ok) {
+                    const errData = await res.json().catch(() => ({}));
+                    throw new Error(errData.message || 'No se pudo eliminar');
+                }
 
                 await this.registrarBitacora('Baja por merma/defecto', `${id}: ${motivo.trim()}`);
-                this.mostrarToast(`Producto ${id} dado de baja con trazabilidad`, 'info');
+                this.mostrarToast(`Producto ${id} dado de baja correctamente`, 'success');
 
-                // Recargar datos desde la DB para mantener sincronización
                 await this.cargarDatos();
 
             } catch (err) {
-                const indiceLocal = this.inventario.findIndex(item => item.id === id);
-                if (indiceLocal >= 0) this.inventario[indiceLocal].estado = 'Merma/Defecto';
-                this.registrarBitacora('Baja local por merma/defecto', `${id}: ${motivo.trim()}`);
-                this.guardarRespaldoLocal();
-                this.renderizarTodo();
-                this.mostrarToast('Eliminado del respaldo local; se sincronizará después.', 'warning');
+                this.mostrarToast(`❌ Error al dar de baja en PostgreSQL: ${err.message}`, 'danger');
             }
         },
 
@@ -982,21 +986,18 @@
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(editado)
                 });
-                if (!res.ok) throw new Error('No se pudo guardar la edición');
+                if (!res.ok) {
+                    const errData = await res.json().catch(() => ({}));
+                    throw new Error(errData.message || 'No se pudo guardar la edición');
+                }
 
                 document.getElementById('modal-editar').classList.remove('active');
                 await this.registrarBitacora('Edición de Producto', `Actualizados datos de ${id}`);
-                this.mostrarToast(`Registro ${id} actualizado`, 'success');
+                this.mostrarToast(`Registro ${id} actualizado en PostgreSQL`, 'success');
                 await this.cargarDatos();
 
             } catch (e) {
-                const indiceLocal = this.inventario.findIndex(item => item.id === id);
-                if (indiceLocal >= 0) this.inventario[indiceLocal] = editado;
-                document.getElementById('modal-editar').classList.remove('active');
-                this.registrarBitacora('Edición local', `Actualizados datos de ${id} en el respaldo local.`);
-                this.guardarRespaldoLocal();
-                this.renderizarTodo();
-                this.mostrarToast('Edición guardada en modo local.', 'warning');
+                this.mostrarToast(`❌ Error al guardar edición en PostgreSQL: ${e.message}`, 'danger');
             }
         },
 
@@ -1010,7 +1011,6 @@
                 detalle
             };
 
-            // Guardar en la base de datos via API directa
             try {
                 await fetch('/api/bitacora', {
                     method: 'POST',
@@ -1021,7 +1021,6 @@
                 console.warn('No se pudo guardar bitácora en el servidor:', e.message);
             }
 
-            // Siempre actualizar respaldo local y UI
             this.bitacora.unshift(nuevoRegistro);
             this.guardarRespaldoLocal();
             this.renderizarBitacora();
@@ -1029,13 +1028,14 @@
         },
 
         exportarCSV() {
-            if (this.inventario.length === 0) {
+            const activos = this.inventario.filter(i => i.estado !== 'Merma/Defecto');
+            if (activos.length === 0) {
                 this.mostrarToast('No hay datos para exportar', 'warning');
                 return;
             }
 
             let csv = 'ID,Nombre Producto,Medidas,Stock (Pz),Color,Composición,Tipo,Bodega,Fecha Reg\n';
-            this.inventario.forEach(i => {
+            activos.forEach(i => {
                 csv += `"${i.id}","${i.nombre_producto || i.tela}","${i.medidas || ''}",${i.stock_pz || 0},"${i.color}","${i.composicion}","${i.tipo}","Bodega ${i.bodega}","${i.fecha}"\n`;
             });
 
