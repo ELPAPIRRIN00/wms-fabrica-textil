@@ -81,9 +81,9 @@ const initDB = async () => {
             for (const item of fallbackInventario) {
                 await pool.query(`
                     INSERT INTO inventario (id, nombre_producto, medidas, stock_pz, color, composicion, tipo, bodega, fecha, estado, tela, presentacion, metros, peso)
-                    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $2, $7, $4, 0)
+                    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
                     ON CONFLICT (id) DO NOTHING
-                `, [item.id, item.nombre_producto, item.medidas, item.stock_pz, item.color, item.composicion, item.tipo, item.bodega, item.fecha, item.estado]);
+                `, [item.id, item.nombre_producto, item.medidas, item.stock_pz, item.color, item.composicion, item.tipo, item.bodega, item.fecha, item.estado, item.nombre_producto, item.tipo, item.stock_pz, 0]);
             }
         }
 
@@ -183,7 +183,7 @@ app.post('/api/productos', async (req, res) => {
         if (pool) {
             await pool.query(`
                 INSERT INTO inventario (id, nombre_producto, medidas, stock_pz, color, composicion, tipo, bodega, fecha, estado, tela, presentacion, metros, peso)
-                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $2, $7, $4, 0)
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
                 ON CONFLICT (id) DO UPDATE SET
                     nombre_producto = EXCLUDED.nombre_producto,
                     medidas = EXCLUDED.medidas,
@@ -198,7 +198,22 @@ app.post('/api/productos', async (req, res) => {
                     presentacion = EXCLUDED.presentacion,
                     metros = EXCLUDED.metros,
                     peso = EXCLUDED.peso
-            `, [cleanId, cleanNombre, cleanMedidas, numStock, cleanColor, cleanComposicion, cleanTipo, numBodega, fechaReg, estReg]);
+            `, [
+                cleanId,           // $1
+                cleanNombre,       // $2
+                cleanMedidas,      // $3
+                numStock,          // $4 (int)
+                cleanColor,        // $5
+                cleanComposicion,  // $6
+                cleanTipo,         // $7
+                numBodega,         // $8
+                fechaReg,          // $9
+                estReg,            // $10
+                cleanNombre,       // $11 (tela)
+                cleanTipo,         // $12 (presentacion)
+                numStock,          // $13 (metros)
+                0                  // $14 (peso)
+            ]);
         } else {
             const index = fallbackInventario.findIndex(item => item.id === cleanId);
             const nuevoObj = { id: cleanId, nombre_producto: cleanNombre, medidas: cleanMedidas, stock_pz: numStock, color: cleanColor, composicion: cleanComposicion, tipo: cleanTipo, bodega: numBodega, fecha: fechaReg, estado: estReg };
@@ -301,9 +316,20 @@ app.post('/api/sincronizar', async (req, res) => {
         
         if (Array.isArray(inv) && inv.length > 0) {
             for (const item of inv) {
+                const cleanId = String(item.id).trim();
+                const cleanNombre = String(item.nombre_producto || item.tela || '').trim();
+                const cleanMedidas = String(item.medidas || 'N/A').trim();
+                const numStock = parseInt(item.stock_pz || item.metros || 0, 10) || 0;
+                const cleanColor = String(item.color || '').trim();
+                const cleanComposicion = String(item.composicion || '').trim();
+                const cleanTipo = String(item.tipo || item.presentacion || 'ROLLO').toUpperCase().trim();
+                const numBodega = parseInt(item.bodega || 1, 10) || 1;
+                const fechaReg = item.fecha || new Date().toLocaleString('es-MX');
+                const estReg = item.estado || 'Activo';
+
                 await client.query(`
                     INSERT INTO inventario (id, nombre_producto, medidas, stock_pz, color, composicion, tipo, bodega, fecha, estado, tela, presentacion, metros, peso)
-                    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $2, $7, $4, 0)
+                    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
                     ON CONFLICT (id) DO UPDATE SET
                         nombre_producto = EXCLUDED.nombre_producto,
                         medidas = EXCLUDED.medidas,
@@ -314,7 +340,7 @@ app.post('/api/sincronizar', async (req, res) => {
                         bodega = EXCLUDED.bodega,
                         fecha = EXCLUDED.fecha,
                         estado = EXCLUDED.estado
-                `, [item.id, item.nombre_producto || item.tela, item.medidas || 'N/A', item.stock_pz || item.metros || 0, item.color || '', item.composicion || '', item.tipo || item.presentacion || 'ROLLO', item.bodega || 1, item.fecha || new Date().toLocaleString('es-MX'), item.estado || 'Activo']);
+                `, [cleanId, cleanNombre, cleanMedidas, numStock, cleanColor, cleanComposicion, cleanTipo, numBodega, fechaReg, estReg, cleanNombre, cleanTipo, numStock, 0]);
             }
         }
 
