@@ -20,6 +20,7 @@
         inventario: [],
         bitacora: [],
         useBackend: true,
+        gruposAbiertos: {},
         storageKeys: {
             inventarioBodega1: 'ham_wms_inventario_bodega_1',
             inventarioBodega2: 'ham_wms_inventario_bodega_2',
@@ -76,6 +77,7 @@
                 this.inventario = inventario.map(item => this.normalizarProducto(item));
                 this.bitacora = bitacora;
                 this.guardarRespaldoLocal();
+                this.poblarFamiliasProducto();
 
                 this.useBackend = true;
                 this.actualizarStatusBadge(true);
@@ -87,6 +89,26 @@
             }
 
             this.renderizarTodo();
+        },
+
+        poblarFamiliasProducto() {
+            const selector = document.getElementById('reg-producto-existente');
+            if (!selector) return;
+
+            const actual = selector.value;
+            const familias = [...new Set(this.productosDeBodegaActiva()
+                .map(item => item.nombre_producto || item.tela)
+                .filter(Boolean))]
+                .sort((a, b) => a.localeCompare(b, 'es'));
+
+            selector.innerHTML = '<option value="">+ Registrar nueva familia...</option>';
+            familias.forEach(familia => {
+                const option = document.createElement('option');
+                option.value = familia;
+                option.textContent = familia;
+                selector.appendChild(option);
+            });
+            selector.value = familias.includes(actual) ? actual : '';
         },
 
         normalizarProducto(item) {
@@ -287,8 +309,23 @@
             document.getElementById('select-bodega').addEventListener('change', (e) => {
                 if (this.rol === 'Operador') return;
                 this.bodegaActiva = parseInt(e.target.value, 10);
+                this.poblarFamiliasProducto();
                 this.mostrarToast(`Cambiado a Bodega ${this.bodegaActiva}`, 'info');
                 this.renderizarTodo();
+            });
+
+            document.getElementById('reg-producto-existente').addEventListener('change', (e) => {
+                if (!e.target.value) return;
+                const producto = this.productosDeBodegaActiva().find(item =>
+                    (item.nombre_producto || item.tela) === e.target.value
+                );
+                document.getElementById('reg-nombre').value = e.target.value;
+                if (producto) {
+                    document.getElementById('reg-medidas').value = producto.medidas || '';
+                    document.getElementById('reg-color').value = producto.color || '';
+                    document.getElementById('reg-composicion').value = producto.composicion || '';
+                    document.getElementById('reg-tipo').value = producto.tipo || 'ROLLO';
+                }
             });
 
             // Generar ID Aleatorio
@@ -314,6 +351,14 @@
                 if (button.dataset.action === 'qr') this.abrirDetalleQR(id);
                 if (button.dataset.action === 'edit') this.abrirModalEditar(id);
                 if (button.dataset.action === 'delete') this.eliminarProducto(id);
+            });
+
+            document.getElementById('tbody-inventario').addEventListener('click', (e) => {
+                const groupButton = e.target.closest('[data-group]');
+                if (!groupButton) return;
+                const grupo = groupButton.dataset.group;
+                this.gruposAbiertos[grupo] = this.gruposAbiertos[grupo] !== false ? false : true;
+                this.renderizarTablaInventario();
             });
 
             // Exportar CSV
@@ -423,7 +468,17 @@
                 return;
             }
 
-            tbody.innerHTML = filtrados.map(item => {
+            const grupos = filtrados.reduce((resultado, item) => {
+                const nombre = item.nombre_producto || item.tela || 'Sin familia';
+                if (!resultado[nombre]) resultado[nombre] = [];
+                resultado[nombre].push(item);
+                return resultado;
+            }, {});
+
+            tbody.innerHTML = Object.entries(grupos).map(([nombre, items]) => {
+                const abierto = this.gruposAbiertos[nombre] !== false;
+                const totalStock = items.reduce((total, item) => total + (Number(item.stock_pz) || 0), 0);
+                const filas = abierto ? items.map(item => {
                 const accionesAdmin = this.rol === 'Administrador' ? `
                     <button class="btn-icon" title="Ver QR" data-action="qr" data-id="${item.id}"><i class="ph ph-qr-code"></i></button>
                     <button class="btn-icon" title="Editar" data-action="edit" data-id="${item.id}"><i class="ph ph-pencil"></i></button>
@@ -431,7 +486,7 @@
                 ` : '<button class="btn-icon" title="Ver QR" data-action="qr" data-id="' + item.id + '"><i class="ph ph-qr-code"></i></button>';
 
                 return `
-                <tr>
+                <tr class="inventory-product-row">
                     <td><strong>${item.id}</strong></td>
                     <td>${item.nombre_producto || item.tela}</td>
                     <td>${item.medidas || 'N/A'}</td>
@@ -446,6 +501,20 @@
                         </div>
                     </td>
                 </tr>
+                `;
+                }).join('') : '';
+
+                return `
+                    <tr class="inventory-group-row">
+                        <td colspan="9">
+                            <button type="button" class="inventory-group-toggle" data-group="${nombre}" aria-expanded="${abierto}">
+                                <i class="ph ph-caret-${abierto ? 'down' : 'right'}"></i>
+                                <strong>${nombre}</strong>
+                                <span class="group-summary">${items.length} pieza(s) | Stock total: ${totalStock} pz</span>
+                            </button>
+                        </td>
+                    </tr>
+                    ${filas}
                 `;
             }).join('');
         },
@@ -533,6 +602,7 @@
                     }
                 }
                 this.inventario.unshift(...productos);
+                this.poblarFamiliasProducto();
 
                 this.registrarBitacora('Ingreso de Producto', `Registradas ${cantidad} piezas de ${nombre} (${stock} pz c/u) - Tipo ${tipo}`);
                 this.generarEtiquetasQR(productos);
@@ -541,6 +611,7 @@
 
             } catch (err) {
                 this.inventario.unshift(...productos);
+                this.poblarFamiliasProducto();
                 this.registrarBitacora('Ingreso local', `Registradas ${cantidad} piezas de ${nombre} (${stock} pz c/u)`);
                 this.generarEtiquetasQR(productos);
                 this.renderizarTodo();
