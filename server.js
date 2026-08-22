@@ -62,6 +62,7 @@ const initDB = async () => {
             ALTER TABLE inventario ADD COLUMN IF NOT EXISTS presentacion VARCHAR(50);
             ALTER TABLE inventario ADD COLUMN IF NOT EXISTS metros NUMERIC(10,2);
             ALTER TABLE inventario ADD COLUMN IF NOT EXISTS peso NUMERIC(10,2);
+            ALTER TABLE inventario DROP CONSTRAINT IF EXISTS inventario_tipo_check;
 
             UPDATE inventario
             SET nombre_producto = COALESCE(NULLIF(nombre_producto, ''), tela, 'Producto sin nombre'),
@@ -74,6 +75,12 @@ const initDB = async () => {
                OR stock_pz IS NULL
                OR tipo IS NULL
                OR tipo = '';
+
+            UPDATE inventario SET tipo = 'ROLLO'
+            WHERE tipo NOT IN ('BULTO', 'PAQUETE', 'ROLLO');
+
+            ALTER TABLE inventario ADD CONSTRAINT inventario_tipo_check
+                CHECK (tipo IN ('BULTO', 'PAQUETE', 'ROLLO'));
         `);
 
         const resInventario = await pool.query('SELECT COUNT(*) FROM inventario');
@@ -105,6 +112,17 @@ const handleError = (err, res) => {
     console.error('Error en servidor:', err);
     res.status(500).json({ status: 'error', message: 'Error interno en el servidor WMS' });
 };
+
+app.get('/api/health', async (req, res) => {
+    if (!pool) return res.json({ status: 'ok', database: 'fallback' });
+    try {
+        await pool.query('SELECT 1');
+        res.json({ status: 'ok', database: 'connected' });
+    } catch (err) {
+        console.error('Healthcheck PostgreSQL fallido:', err.message);
+        res.status(503).json({ status: 'error', database: 'unavailable' });
+    }
+});
 
 /* =========================================================
  * 🛠️ RUTAS DE LA API REST
