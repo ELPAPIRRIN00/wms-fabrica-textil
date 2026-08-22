@@ -272,6 +272,35 @@ app.get('/api/bitacora', async (req, res) => {
     }
 });
 
+// 5b. Crear entrada individual en bitácora
+app.post('/api/bitacora', async (req, res) => {
+    try {
+        const { fecha, usuario, accion, bodega, detalle } = req.body;
+
+        if (!accion) {
+            return res.status(400).json({ status: 'error', message: 'La acción es obligatoria.' });
+        }
+
+        const fechaReg = fecha || new Date().toLocaleString();
+        const usuarioReg = usuario || 'Sistema';
+        const bodegaReg = bodega || '-';
+        const detalleReg = detalle || '';
+
+        if (pool) {
+            await pool.query(
+                'INSERT INTO bitacora (fecha, usuario, accion, bodega, detalle) VALUES ($1, $2, $3, $4, $5)',
+                [fechaReg, usuarioReg, accion, bodegaReg, detalleReg]
+            );
+        } else {
+            fallbackBitacora.unshift({ fecha: fechaReg, usuario: usuarioReg, accion, bodega: bodegaReg, detalle: detalleReg });
+        }
+
+        res.json({ status: 'ok', message: 'Entrada de bitácora registrada.' });
+    } catch (err) {
+        handleError(err, res);
+    }
+});
+
 // 6. Sincronización completa masiva
 app.post('/api/sincronizar', async (req, res) => {
     if (!pool) {

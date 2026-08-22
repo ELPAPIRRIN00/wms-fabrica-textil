@@ -179,6 +179,8 @@
         },
 
         async sincronizarConBackend() {
+            // Solo se usa para recuperar datos offline pendientes,
+            // NUNCA en el flujo normal de operación.
             if (!this.useBackend) return;
             try {
                 await fetch('/api/sincronizar', {
@@ -586,28 +588,21 @@
 
             // Guardar en backend REST
             try {
-                const res = await fetch('/api/productos', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(productos[0])
-                });
-
-                if (!res.ok) throw new Error('Error guardando en base de datos');
-
-                // Actualizar array local
-                if (productos.length > 1) {
-                    for (const producto of productos.slice(1)) {
-                        const loteResponse = await fetch('/api/productos', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(producto) });
-                        if (!loteResponse.ok) throw new Error('Error guardando lote');
-                    }
+                for (const producto of productos) {
+                    const res = await fetch('/api/productos', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(producto)
+                    });
+                    if (!res.ok) throw new Error('Error guardando en base de datos');
                 }
-                this.inventario.unshift(...productos);
-                this.poblarFamiliasProducto();
 
-                this.registrarBitacora('Ingreso de Producto', `Registradas ${cantidad} piezas de ${nombre} (${stock} pz c/u) - Tipo ${tipo}`);
+                await this.registrarBitacora('Ingreso de Producto', `Registradas ${cantidad} piezas de ${nombre} (${stock} pz c/u) - Tipo ${tipo}`);
                 this.generarEtiquetasQR(productos);
                 this.mostrarToast(`${cantidad} producto(s) registrado(s) correctamente`, 'success');
-                this.renderizarTodo();
+
+                // Recargar datos desde la DB para mantener sincronización
+                await this.cargarDatos();
 
             } catch (err) {
                 this.inventario.unshift(...productos);
@@ -920,10 +915,11 @@
 
                 if (!res.ok) throw new Error('No se pudo eliminar');
 
-                this.inventario = this.inventario.filter(i => i.id !== id);
-                this.registrarBitacora('Baja por merma/defecto', `${id}: ${motivo.trim()}`);
+                await this.registrarBitacora('Baja por merma/defecto', `${id}: ${motivo.trim()}`);
                 this.mostrarToast(`Producto ${id} dado de baja con trazabilidad`, 'info');
-                this.renderizarTodo();
+
+                // Recargar datos desde la DB para mantener sincronización
+                await this.cargarDatos();
 
             } catch (err) {
                 const indiceLocal = this.inventario.findIndex(item => item.id === id);
@@ -989,9 +985,9 @@
                 if (!res.ok) throw new Error('No se pudo guardar la edición');
 
                 document.getElementById('modal-editar').classList.remove('active');
-                this.registrarBitacora('Edición de Producto', `Actualizados datos de ${id}`);
+                await this.registrarBitacora('Edición de Producto', `Actualizados datos de ${id}`);
                 this.mostrarToast(`Registro ${id} actualizado`, 'success');
-                this.cargarDatos();
+                await this.cargarDatos();
 
             } catch (e) {
                 const indiceLocal = this.inventario.findIndex(item => item.id === id);
@@ -1014,9 +1010,20 @@
                 detalle
             };
 
+            // Guardar en la base de datos via API directa
+            try {
+                await fetch('/api/bitacora', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(nuevoRegistro)
+                });
+            } catch (e) {
+                console.warn('No se pudo guardar bitácora en el servidor:', e.message);
+            }
+
+            // Siempre actualizar respaldo local y UI
             this.bitacora.unshift(nuevoRegistro);
             this.guardarRespaldoLocal();
-            this.sincronizarConBackend();
             this.renderizarBitacora();
             this.renderizarRecientesDashboard();
         },
