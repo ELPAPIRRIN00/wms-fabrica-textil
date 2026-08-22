@@ -64,6 +64,26 @@ const initDB = async () => {
             ALTER TABLE inventario ADD COLUMN IF NOT EXISTS peso NUMERIC(10,2);
             ALTER TABLE inventario DROP CONSTRAINT IF EXISTS inventario_tipo_check;
 
+            ALTER TABLE inventario ALTER COLUMN tela DROP NOT NULL;
+            ALTER TABLE inventario ALTER COLUMN presentacion DROP NOT NULL;
+            ALTER TABLE inventario ALTER COLUMN metros DROP NOT NULL;
+            ALTER TABLE inventario ALTER COLUMN peso DROP NOT NULL;
+
+            DO $migration$
+            DECLARE constraint_record RECORD;
+            BEGIN
+                FOR constraint_record IN
+                    SELECT conname
+                    FROM pg_constraint
+                    WHERE conrelid = 'inventario'::regclass
+                      AND contype = 'c'
+                      AND pg_get_constraintdef(oid) ILIKE '%tipo%'
+                LOOP
+                    EXECUTE format('ALTER TABLE inventario DROP CONSTRAINT IF EXISTS %I', constraint_record.conname);
+                END LOOP;
+            END
+            $migration$;
+
             UPDATE inventario
             SET nombre_producto = COALESCE(NULLIF(nombre_producto, ''), tela, 'Producto sin nombre'),
                 medidas = COALESCE(NULLIF(medidas, ''), 'N/A'),
