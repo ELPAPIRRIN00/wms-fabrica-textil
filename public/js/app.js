@@ -28,7 +28,8 @@
 
         cuentas: {
             admin: { password: '1234', nombre: 'Administrador' },
-            operador: { password: '1234', nombre: 'Operador de Bodega' }
+            oper1: { password: '1234', nombre: 'Operador 1', bodega: 1 },
+            oper2: { password: '1234', nombre: 'Operador 2', bodega: 2 }
         },
 
         /* ---------- Inicialización ---------- */
@@ -196,7 +197,8 @@
             if (cuenta && cuenta.password === password) {
                 this.usuario = cuenta.nombre;
                 this.rol = usuario === 'admin' ? 'Administrador' : 'Operador';
-                localStorage.setItem('ham_wms_session', JSON.stringify({ usuario: this.usuario, rol: this.rol }));
+                if (cuenta.bodega) this.bodegaActiva = cuenta.bodega;
+                localStorage.setItem('ham_wms_session', JSON.stringify({ usuario: this.usuario, rol: this.rol, bodega: cuenta.bodega || null }));
                 document.getElementById('login-modal').classList.remove('active');
                 this.mostrarAppShell();
                 this.mostrarToast(`Bienvenido al sistema, ${this.usuario}`, 'success');
@@ -214,6 +216,16 @@
             document.getElementById('app-shell').classList.remove('hidden');
             document.getElementById('user-display-name').textContent = this.usuario;
             document.getElementById('user-display-role').textContent = this.rol;
+            const dashboardButton = document.querySelector('[data-target="dashboard"]');
+            const exportButton = document.getElementById('btn-export-csv');
+            const warehouseSelect = document.getElementById('select-bodega');
+            const operador = this.rol === 'Operador';
+            if (dashboardButton) dashboardButton.hidden = operador;
+            if (exportButton) exportButton.hidden = operador;
+            if (operador && this.bodegaActiva) {
+                warehouseSelect.value = String(this.bodegaActiva);
+                warehouseSelect.disabled = true;
+            }
             this.renderizarTodo();
         },
 
@@ -273,6 +285,7 @@
 
             // Bodega Selector
             document.getElementById('select-bodega').addEventListener('change', (e) => {
+                if (this.rol === 'Operador') return;
                 this.bodegaActiva = parseInt(e.target.value, 10);
                 this.mostrarToast(`Cambiado a Bodega ${this.bodegaActiva}`, 'info');
                 this.renderizarTodo();
@@ -475,23 +488,18 @@
             const nombre = document.getElementById('reg-nombre').value.trim();
             const medidas = document.getElementById('reg-medidas').value.trim();
             const stock = parseInt(document.getElementById('reg-stock').value, 10);
+            const cantidad = parseInt(document.getElementById('reg-cantidad').value, 10);
             const color = document.getElementById('reg-color').value.trim();
             const composicion = document.getElementById('reg-composicion').value.trim();
             const tipo = document.getElementById('reg-tipo').value;
 
-            if (!id || !nombre || !medidas || isNaN(stock) || stock < 1 || !color || !composicion) {
+            if (!id || !nombre || !medidas || isNaN(stock) || stock < 1 || isNaN(cantidad) || cantidad < 1 || cantidad > 1000 || !color || !composicion) {
                 this.mostrarToast('Por favor completa los campos requeridos', 'warning');
                 return;
             }
 
-            const productoExistente = this.inventario.find(item => item.id === id);
-            if (productoExistente) {
-                this.mostrarToast(`El ID ${id} ya existe en Bodega ${productoExistente.bodega}. Usa un ID único.`, 'warning');
-                return;
-            }
-
-            const nuevoProducto = {
-                id,
+            const productos = Array.from({ length: cantidad }, (_, indice) => ({
+                id: cantidad === 1 ? id : `${id}-${String(indice + 1).padStart(3, '0')}`,
                 nombre_producto: nombre,
                 medidas,
                 stock_pz: stock,
@@ -501,40 +509,40 @@
                 bodega: this.bodegaActiva,
                 fecha: this.obtenerFechaActual(),
                 estado: 'Activo'
-            };
+            }));
+            if (productos.some(producto => this.inventario.some(item => item.id === producto.id))) {
+                this.mostrarToast('Uno de los IDs ya existe. Genera una referencia nueva.', 'warning');
+                return;
+            }
 
             // Guardar en backend REST
             try {
                 const res = await fetch('/api/productos', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(nuevoProducto)
+                    body: JSON.stringify(productos[0])
                 });
 
                 if (!res.ok) throw new Error('Error guardando en base de datos');
 
                 // Actualizar array local
-                const existingIdx = this.inventario.findIndex(i => i.id === id);
-                if (existingIdx >= 0) {
-                    this.inventario[existingIdx] = nuevoProducto;
-                } else {
-                    this.inventario.unshift(nuevoProducto);
+                if (productos.length > 1) {
+                    for (const producto of productos.slice(1)) {
+                        const loteResponse = await fetch('/api/productos', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(producto) });
+                        if (!loteResponse.ok) throw new Error('Error guardando lote');
+                    }
                 }
+                this.inventario.unshift(...productos);
 
-                this.registrarBitacora('Ingreso de Producto', `Registrado ${nombre} (${stock} pz) - Tipo ${tipo}`);
-                this.generarEtiquetaQR(id);
-                this.mostrarToast(`Producto ${id} registrado correctamente`, 'success');
+                this.registrarBitacora('Ingreso de Producto', `Registradas ${cantidad} piezas de ${nombre} (${stock} pz c/u) - Tipo ${tipo}`);
+                this.generarEtiquetasQR(productos);
+                this.mostrarToast(`${cantidad} producto(s) registrado(s) correctamente`, 'success');
                 this.renderizarTodo();
 
             } catch (err) {
-                const existingIdx = this.inventario.findIndex(item => item.id === id);
-                if (existingIdx >= 0) {
-                    this.inventario[existingIdx] = nuevoProducto;
-                } else {
-                    this.inventario.unshift(nuevoProducto);
-                }
-                this.registrarBitacora('Ingreso local', `Registrado ${nombre} (${stock} pz) - Tipo ${tipo}`);
-                this.generarEtiquetaQR(id);
+                this.inventario.unshift(...productos);
+                this.registrarBitacora('Ingreso local', `Registradas ${cantidad} piezas de ${nombre} (${stock} pz c/u)`);
+                this.generarEtiquetasQR(productos);
                 this.renderizarTodo();
                 this.guardarRespaldoLocal();
                 this.mostrarToast('Guardado en modo local; se sincronizará al volver el servidor.', 'warning');
@@ -562,6 +570,40 @@
 
             document.getElementById('qr-preview-text').textContent = `Código QR para ID: ${idProducto}`;
             document.getElementById('btn-imprimir-qr').removeAttribute('disabled');
+        },
+
+        generarEtiquetasQR(productos) {
+            if (typeof QRCode === 'undefined') {
+                this.mostrarToast('No se cargó la biblioteca de códigos QR.', 'danger');
+                return;
+            }
+            const primerProducto = productos[0];
+            this.generarEtiquetaQR(primerProducto.id);
+            const printArea = document.getElementById('print-area');
+            if (!printArea) return;
+            printArea.innerHTML = '';
+
+            productos.forEach(producto => {
+                const temp = document.createElement('div');
+                temp.style.position = 'fixed';
+                temp.style.left = '-10000px';
+                document.body.appendChild(temp);
+                new QRCode(temp, {
+                    text: producto.id,
+                    width: 220,
+                    height: 220,
+                    colorDark: '#111827',
+                    colorLight: '#ffffff',
+                    correctLevel: QRCode.CorrectLevel.H
+                });
+                const image = temp.querySelector('img');
+                const canvas = temp.querySelector('canvas');
+                const source = image?.src || canvas?.toDataURL('image/png');
+                if (source) {
+                    printArea.insertAdjacentHTML('beforeend', `<section class="print-label"><h2>H.A.M. POO WMS</h2><h3>${producto.nombre_producto}</h3><img src="${source}" alt="QR ${producto.id}"><p><strong>${producto.id}</strong></p><p>Bodega ${producto.bodega} | ${producto.tipo}</p></section>`);
+                }
+                temp.remove();
+            });
         },
 
         abrirDetalleQR(id) {
@@ -623,14 +665,10 @@
                 this.mostrarToast('El QR todavía no está listo.', 'warning');
                 return;
             }
-            const printWindow = window.open('', '_blank');
-            if (!printWindow) {
-                this.mostrarToast('Permite ventanas emergentes para imprimir la etiqueta.', 'warning');
-                return;
-            }
             const producto = this.productoQRActual;
-            printWindow.document.write(`<!doctype html><html lang="es"><head><meta charset="utf-8"><title>QR ${producto.id}</title><style>body{font-family:Arial,sans-serif;text-align:center;padding:24px}.ticket{display:inline-block;border:2px dashed #111;padding:18px;width:240px}img{width:190px;height:190px}h2{font-size:18px}p{margin:6px 0}</style></head><body onload="window.print();window.close()"><div class="ticket"><h2>${producto.nombre_producto || producto.tela || producto.id}</h2><img src="${dataUrl}" alt="QR ${producto.id}"><p><strong>${producto.id}</strong></p><p>Bodega ${producto.bodega}</p></div></body></html>`);
-            printWindow.document.close();
+            const printArea = document.getElementById('print-area');
+            printArea.innerHTML = `<section class="print-label"><h2>H.A.M. POO WMS</h2><h3>${producto.nombre_producto || producto.tela || producto.id}</h3><img src="${dataUrl}" alt="QR ${producto.id}"><p><strong>${producto.id}</strong></p><p>Bodega ${producto.bodega}</p></section>`;
+            window.print();
         },
 
         obtenerDatosQR(selector) {
@@ -643,38 +681,12 @@
         },
 
         imprimirEtiquetaQR() {
-            const qrDataUrl = this.obtenerDatosQR('#qrcode');
-            if (!qrDataUrl) {
+            const printArea = document.getElementById('print-area');
+            if (!printArea || !printArea.querySelector('.print-label')) {
                 this.mostrarToast('Genera un QR antes de imprimir', 'warning');
                 return;
             }
-            const printWindow = window.open('', '_blank');
-            if (!printWindow) {
-                this.mostrarToast('El navegador bloqueó la ventana de impresión. Permite ventanas emergentes.', 'warning');
-                return;
-            }
-            printWindow.document.write(`
-                <html>
-                <head>
-                    <title>Impresión de Etiqueta QR WMS</title>
-                    <style>
-                        body { font-family: sans-serif; text-align: center; padding: 20px; }
-                        .ticket { border: 2px dashed #000; padding: 15px; display: inline-block; width: 220px; }
-                        h3 { margin: 5px 0; font-size: 16px; }
-                        p { margin: 3px 0; font-size: 12px; }
-                    </style>
-                </head>
-                <body onload="window.print(); window.close();">
-                    <div class="ticket">
-                        <h3>H.A.M. POO WMS</h3>
-                        <img src="${qrDataUrl}" width="130" />
-                        <p><strong>ID:</strong> ${document.getElementById('reg-id').value}</p>
-                        <p>${document.getElementById('reg-nombre').value}</p>
-                    </div>
-                </body>
-                </html>
-            `);
-            printWindow.document.close();
+            window.print();
         },
 
         /* ---------- ESCÁNER QR CON VALIDACIÓN DIRECTA ---------- */
@@ -822,23 +834,30 @@
                 this.mostrarToast('Solo el administrador puede eliminar registros.', 'warning');
                 return;
             }
-            if (!confirm(`¿Estás seguro de eliminar definitivamente el registro ${id}?`)) return;
+            const motivo = window.prompt(`Indica el motivo de baja por merma/defecto para ${id}:`);
+            if (!motivo || !motivo.trim()) {
+                this.mostrarToast('La baja requiere un motivo obligatorio.', 'warning');
+                return;
+            }
 
             try {
                 const res = await fetch(`/api/productos/${encodeURIComponent(id)}`, {
-                    method: 'DELETE'
+                    method: 'DELETE',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ motivo: motivo.trim(), usuario: this.usuario })
                 });
 
                 if (!res.ok) throw new Error('No se pudo eliminar');
 
                 this.inventario = this.inventario.filter(i => i.id !== id);
-                this.registrarBitacora('Eliminación de Registro', `Registro ${id} eliminado de PostgreSQL.`);
-                this.mostrarToast(`Producto ${id} eliminado correctamente`, 'info');
+                this.registrarBitacora('Baja por merma/defecto', `${id}: ${motivo.trim()}`);
+                this.mostrarToast(`Producto ${id} dado de baja con trazabilidad`, 'info');
                 this.renderizarTodo();
 
             } catch (err) {
-                this.inventario = this.inventario.filter(item => item.id !== id);
-                this.registrarBitacora('Eliminación local', `Registro ${id} eliminado del respaldo local.`);
+                const indiceLocal = this.inventario.findIndex(item => item.id === id);
+                if (indiceLocal >= 0) this.inventario[indiceLocal].estado = 'Merma/Defecto';
+                this.registrarBitacora('Baja local por merma/defecto', `${id}: ${motivo.trim()}`);
                 this.guardarRespaldoLocal();
                 this.renderizarTodo();
                 this.mostrarToast('Eliminado del respaldo local; se sincronizará después.', 'warning');

@@ -199,21 +199,23 @@ app.delete('/api/productos/:id', async (req, res) => {
     try {
         const { id } = req.params;
         const cleanId = id.trim();
-
-        if (pool) {
-            const result = await pool.query('DELETE FROM inventario WHERE id = $1 RETURNING *', [cleanId]);
-            if (result.rowCount === 0) {
-                return res.status(404).json({ status: 'error', message: 'El producto a eliminar no existe.' });
-            }
-        } else {
-            const initialLen = fallbackInventario.length;
-            fallbackInventario = fallbackInventario.filter(item => item.id !== cleanId);
-            if (fallbackInventario.length === initialLen) {
-                return res.status(404).json({ status: 'error', message: 'El producto no fue encontrado.' });
-            }
+        const motivo = String(req.body?.motivo || '').trim();
+        if (!motivo) {
+            return res.status(400).json({ status: 'error', message: 'El motivo de baja es obligatorio.' });
         }
 
-        res.json({ status: 'ok', message: `Producto ${cleanId} eliminado definitivamente.` });
+        if (pool) {
+            const result = await pool.query("UPDATE inventario SET estado = 'Merma/Defecto' WHERE id = $1 AND estado <> 'Merma/Defecto' RETURNING *", [cleanId]);
+            if (result.rowCount === 0) {
+                return res.status(404).json({ status: 'error', message: 'El producto no existe o ya está dado de baja.' });
+            }
+        } else {
+            const producto = fallbackInventario.find(item => item.id === cleanId);
+            if (!producto || producto.estado === 'Merma/Defecto') return res.status(404).json({ status: 'error', message: 'El producto no fue encontrado.' });
+            producto.estado = 'Merma/Defecto';
+        }
+
+        res.json({ status: 'ok', message: `Producto ${cleanId} dado de baja; no se borró físicamente.` });
     } catch (err) {
         handleError(err, res);
     }
