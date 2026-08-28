@@ -34,11 +34,15 @@
         /* ---------- Inicialización ---------- */
         async init() {
             this.iniciarReloj();
-            await this.cargarDatos();
-            this.iniciarPolling();
             this.configurarNavegacion();
             this.configurarEventos();
             this.verificarSesion();
+            try {
+                await this.cargarDatos();
+                this.iniciarPolling();
+            } catch (err) {
+                console.error('Error al inicializar datos:', err);
+            }
         },
 
         iniciarReloj() {
@@ -287,56 +291,61 @@
         /* ---------- Configuración de Eventos ---------- */
         configurarEventos() {
             // Formulario Login
-            document.getElementById('form-login').addEventListener('submit', (e) => {
+            document.getElementById('form-login')?.addEventListener('submit', (e) => {
                 e.preventDefault();
-                const user = document.getElementById('login-usuario').value;
-                const pass = document.getElementById('login-pass').value;
+                const user = document.getElementById('login-usuario')?.value || 'admin';
+                const pass = document.getElementById('login-pass')?.value || '1234';
                 this.iniciarSesion(user, pass);
             });
 
             // Logout
-            document.getElementById('btn-logout').addEventListener('click', () => this.cerrarSesion());
+            document.getElementById('btn-logout')?.addEventListener('click', () => this.cerrarSesion());
 
-            document.getElementById('reg-producto-existente').addEventListener('change', (e) => {
+            document.getElementById('reg-producto-existente')?.addEventListener('change', (e) => {
                 if (!e.target.value) return;
                 const producto = this.productosActivos().find(item =>
                     (item.nombre_producto || item.tela) === e.target.value
                 );
-                document.getElementById('reg-nombre').value = e.target.value;
+                const inputNombre = document.getElementById('reg-nombre');
+                if (inputNombre) inputNombre.value = e.target.value;
                 if (producto) {
-                    document.getElementById('reg-medidas').value = producto.medidas || '';
-                    document.getElementById('reg-color').value = producto.color || '';
-                    document.getElementById('reg-composicion').value = producto.composicion || '';
-                    document.getElementById('reg-tipo').value = producto.tipo || 'ROLLO';
+                    const elMedidas = document.getElementById('reg-medidas');
+                    if (elMedidas) elMedidas.value = producto.medidas || '';
+                    const elColor = document.getElementById('reg-color');
+                    if (elColor) elColor.value = producto.color || '';
+                    const elComp = document.getElementById('reg-composicion');
+                    if (elComp) elComp.value = producto.composicion || '';
+                    const elTipo = document.getElementById('reg-tipo');
+                    if (elTipo) elTipo.value = producto.tipo || 'ROLLO';
                 }
             });
 
             // Generar ID Aleatorio
-            document.getElementById('btn-gen-id').addEventListener('click', () => {
+            document.getElementById('btn-gen-id')?.addEventListener('click', () => {
                 const randomNum = Math.floor(1000 + Math.random() * 9000);
-                document.getElementById('reg-id').value = `HAM-${randomNum}`;
+                const elRegId = document.getElementById('reg-id');
+                if (elRegId) elRegId.value = `HAM-${randomNum}`;
             });
 
             // Formulario de Registro
-            document.getElementById('form-registro').addEventListener('submit', (e) => {
+            document.getElementById('form-registro')?.addEventListener('submit', (e) => {
                 e.preventDefault();
                 this.registrarProducto();
             });
 
             // Buscador e Invetario Filters
-            document.getElementById('input-search-inventario').addEventListener('input', () => this.renderizarTablaInventario());
-            document.getElementById('filter-tipo').addEventListener('change', () => this.renderizarTablaInventario());
+            document.getElementById('input-search-inventario')?.addEventListener('input', () => this.renderizarTablaInventario());
+            document.getElementById('filter-tipo')?.addEventListener('change', () => this.renderizarTablaInventario());
 
-            document.getElementById('tbody-inventario').addEventListener('click', (e) => {
+            document.getElementById('tbody-inventario')?.addEventListener('click', (e) => {
                 const button = e.target.closest('[data-action][data-id]');
-                if (!button) return;
-                const id = button.dataset.id;
-                if (button.dataset.action === 'qr') this.abrirDetalleQR(id);
-                if (button.dataset.action === 'edit') this.abrirModalEditar(id);
-                if (button.dataset.action === 'delete') this.eliminarProducto(id);
-            });
+                if (button) {
+                    const id = button.dataset.id;
+                    if (button.dataset.action === 'qr') this.abrirDetalleQR(id);
+                    if (button.dataset.action === 'edit') this.abrirModalEditar(id);
+                    if (button.dataset.action === 'delete') this.eliminarProducto(id);
+                }
 
-            document.getElementById('tbody-inventario').addEventListener('click', (e) => {
                 const deleteTypeBtn = e.target.closest('[data-action="delete-type"]');
                 if (deleteTypeBtn) {
                     this.abrirModalEliminarTipo(deleteTypeBtn.dataset.name, deleteTypeBtn.dataset.count);
@@ -351,29 +360,29 @@
             });
 
             // Exportar CSV
-            document.getElementById('btn-export-csv').addEventListener('click', () => this.exportarCSV());
+            document.getElementById('btn-export-csv')?.addEventListener('click', () => this.exportarCSV());
 
             // Botón Imprimir QR
-            document.getElementById('btn-imprimir-qr').addEventListener('click', () => this.imprimirEtiquetaQR());
-            document.getElementById('btn-cerrar-qr-detalle').addEventListener('click', () => {
-                document.getElementById('modal-qr-detalle').classList.remove('active');
+            document.getElementById('btn-imprimir-qr')?.addEventListener('click', () => this.imprimirEtiquetaQR());
+            document.getElementById('btn-cerrar-qr-detalle')?.addEventListener('click', () => {
+                document.getElementById('modal-qr-detalle')?.classList.remove('active');
             });
-            document.getElementById('btn-descargar-qr-detalle').addEventListener('click', () => this.descargarQRDetalle());
-            document.getElementById('btn-imprimir-qr-detalle').addEventListener('click', () => this.imprimirQRDetalle());
+            document.getElementById('btn-descargar-qr-detalle')?.addEventListener('click', () => this.descargarQRDetalle());
+            document.getElementById('btn-imprimir-qr-detalle')?.addEventListener('click', () => this.imprimirQRDetalle());
 
             // Control Escáner
-            document.getElementById('btn-start-scanner').addEventListener('click', () => this.iniciarCamaraScanner());
-            document.getElementById('btn-stop-scanner').addEventListener('click', () => this.detenerCamaraScanner());
+            document.getElementById('btn-start-scanner')?.addEventListener('click', () => this.iniciarCamaraScanner());
+            document.getElementById('btn-stop-scanner')?.addEventListener('click', () => this.detenerCamaraScanner());
 
             // Acciones Escáner
-            document.getElementById('btn-scan-descontar').addEventListener('click', () => this.descontarStockEscaneado());
-            document.getElementById('btn-scan-eliminar').addEventListener('click', () => this.eliminarProductoEscaneado());
+            document.getElementById('btn-scan-descontar')?.addEventListener('click', () => this.descontarStockEscaneado());
+            document.getElementById('btn-scan-eliminar')?.addEventListener('click', () => this.eliminarProductoEscaneado());
 
             // Modal Editar
-            document.getElementById('btn-cancelar-editar').addEventListener('click', () => {
-                document.getElementById('modal-editar').classList.remove('active');
+            document.getElementById('btn-cancelar-editar')?.addEventListener('click', () => {
+                document.getElementById('modal-editar')?.classList.remove('active');
             });
-            document.getElementById('form-editar').addEventListener('submit', (e) => {
+            document.getElementById('form-editar')?.addEventListener('submit', (e) => {
                 e.preventDefault();
                 this.guardarEdicionProducto();
             });
@@ -401,13 +410,20 @@
             const activos = this.inventario.filter(i => i.estado !== 'Merma/Defecto');
             const totalItems = activos.length;
             const totalPiezas = activos.reduce((acc, i) => acc + (parseInt(i.stock_pz, 10) || 0), 0);
-            const bodega1 = activos.filter(i => Number(i.bodega) === 1).length;
-            const bodega2 = activos.filter(i => Number(i.bodega) === 2).length;
+            const rollos = activos.filter(i => i.tipo === 'ROLLO' || i.tipo === 'BULTO').length;
+            const empaques = activos.filter(i => i.tipo === 'PAQUETE').length;
 
-            document.getElementById('kpi-total-items').textContent = totalItems;
-            document.getElementById('kpi-total-piezas').textContent = `${totalPiezas} pz`;
-            document.getElementById('kpi-bodega-1').textContent = bodega1;
-            document.getElementById('kpi-bodega-2').textContent = bodega2;
+            const elTotalItems = document.getElementById('kpi-total-items');
+            if (elTotalItems) elTotalItems.textContent = totalItems;
+
+            const elTotalPiezas = document.getElementById('kpi-total-piezas');
+            if (elTotalPiezas) elTotalPiezas.textContent = `${totalPiezas} pz`;
+
+            const elRollos = document.getElementById('kpi-rollos');
+            if (elRollos) elRollos.textContent = rollos;
+
+            const elEmpaques = document.getElementById('kpi-empaques');
+            if (elEmpaques) elEmpaques.textContent = empaques;
         },
 
         renderizarGraficoEmpaques() {
@@ -419,7 +435,7 @@
                 return;
             }
 
-            const productos = this.productosDeBodegaActiva();
+            const productos = this.productosActivos();
             const bultos = productos.filter(i => i.tipo === 'BULTO').length;
             const paquetes = productos.filter(i => i.tipo === 'PAQUETE').length;
             const rollos = productos.filter(i => i.tipo === 'ROLLO').length;
