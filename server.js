@@ -264,24 +264,22 @@ app.delete('/api/productos/tipo/:nombre', async (req, res) => {
         const cleanNombre = String(nombre).trim();
         const motivo = String(req.body?.motivo || '').trim();
         const usuario = String(req.body?.usuario || 'Administrador').trim();
-        const bodega = parseInt(req.body?.bodega, 10) || 1;
-
         if (!motivo) {
             return res.status(400).json({ status: 'error', message: 'El motivo de baja es obligatorio.' });
         }
 
         if (pool) {
             const result = await pool.query(
-                "UPDATE inventario SET estado = 'Merma/Defecto' WHERE (nombre_producto = $1 OR tela = $1) AND bodega = $2 AND estado != 'Merma/Defecto' RETURNING *",
-                [cleanNombre, bodega]
+                "UPDATE inventario SET estado = 'Merma/Defecto' WHERE (nombre_producto = $1 OR tela = $1) AND estado != 'Merma/Defecto' RETURNING *",
+                [cleanNombre]
             );
             if (result.rowCount === 0) {
-                return res.status(404).json({ status: 'error', message: 'No se encontraron productos activos de esta familia en la bodega seleccionada.' });
+                return res.status(404).json({ status: 'error', message: 'No se encontraron productos activos de esta familia.' });
             }
         } else {
             let actualizados = 0;
             fallbackInventario.forEach(item => {
-                if ((item.nombre_producto === cleanNombre || item.tela === cleanNombre) && Number(item.bodega) === bodega && item.estado !== 'Merma/Defecto') {
+                if ((item.nombre_producto === cleanNombre || item.tela === cleanNombre) && item.estado !== 'Merma/Defecto') {
                     item.estado = 'Merma/Defecto';
                     actualizados++;
                 }
@@ -297,10 +295,10 @@ app.delete('/api/productos/tipo/:nombre', async (req, res) => {
         if (pool) {
              await pool.query(
                 'INSERT INTO bitacora (fecha, usuario, accion, bodega, detalle) VALUES ($1, $2, $3, $4, $5)',
-                [fechaReg, usuario, 'Baja por merma/defecto', `Bodega ${bodega}`, detalleBitacora]
+                [fechaReg, usuario, 'Baja por merma/defecto', 'General', detalleBitacora]
             );
         } else {
-             fallbackBitacora.unshift({ id: Date.now(), fecha: fechaReg, usuario: usuario, accion: 'Baja por merma/defecto', bodega: `Bodega ${bodega}`, detalle: detalleBitacora });
+             fallbackBitacora.unshift({ id: Date.now(), fecha: fechaReg, usuario: usuario, accion: 'Baja por merma/defecto', bodega: 'General', detalle: detalleBitacora });
         }
 
         res.json({ status: 'ok', message: `Familia de productos '${cleanNombre}' dada de baja correctamente.` });

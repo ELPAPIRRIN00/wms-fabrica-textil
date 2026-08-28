@@ -46,8 +46,7 @@
                     <label for="login-usuario"><i class="ph ph-user"></i> Usuario</label>
                     <select id="login-usuario" required>
                         <option value="admin">Administrador (Acceso Total)</option>
-                        <option value="oper1">Operador 1 (Bodega 1)</option>
-                        <option value="oper2">Operador 2 (Bodega 2)</option>
+                        <option value="operador">Operador (Inventario)</option>
                     </select>
                 </div>
                 <div class="input-group">
@@ -111,18 +110,11 @@
             
             <!-- Top Bar -->
             <header class="topbar">
-                <div class="bodega-selector">
-                    <label for="select-bodega"><i class="ph ph-warehouse"></i> Bodega Activa:</label>
-                    <select id="select-bodega">
-                        <option value="1">Bodega 1 (Principal - Rollos/Bultos)</option>
-                        <option value="2">Bodega 2 (Secundaria - Empaques/Paquetes)</option>
-                    </select>
-                </div>
                 <div class="system-status">
-                    <span id="backend-status-badge" class="badge badge-success">
-                        <i class="ph ph-circle-wavy-check"></i> Base de Datos Conectada
+                    <span id="backend-status-badge" class="badge badge-warning">
+                        <i class="ph ph-warning"></i> Conectando...
                     </span>
-                    <span id="clock-display" class="clock">00:00:00</span>
+                    <div class="clock" id="clock-display">--:--:--</div>
                 </div>
             </header>
 
@@ -148,20 +140,22 @@
                             <h3 id="kpi-total-piezas">0 pz</h3>
                         </div>
                     </div>
-                    <div class="kpi-card">
-                        <div class="kpi-icon orange"><i class="ph ph-warehouse"></i></div>
-                        <div class="kpi-data">
-                            <span class="kpi-title">Ítems en Bodega 1</span>
-                            <h3 id="kpi-bodega-1">0</h3>
+                        <div class="kpi-card">
+                            <div class="kpi-icon"><i class="ph ph-package"></i></div>
+                            <div class="kpi-info">
+                                <span class="kpi-title">Rollos/Bultos</span>
+                                <h3 id="kpi-rollos">0</h3>
+                            </div>
                         </div>
-                    </div>
-                    <div class="kpi-card">
-                        <div class="kpi-icon purple"><i class="ph ph-buildings"></i></div>
-                        <div class="kpi-data">
-                            <span class="kpi-title">Ítems en Bodega 2</span>
-                            <h3 id="kpi-bodega-2">0</h3>
+                        <div class="kpi-card">
+                            <div class="kpi-icon" style="background: var(--primary-dim); color: var(--primary);">
+                                <i class="ph ph-box-arrow-up"></i>
+                            </div>
+                            <div class="kpi-info">
+                                <span class="kpi-title">Empaques/Paquetes</span>
+                                <h3 id="kpi-empaques">0</h3>
+                            </div>
                         </div>
-                    </div>
                 </div>
 
                 <div class="charts-grid">
@@ -183,8 +177,8 @@
             <!-- VISTA 2: INVENTARIO -->
             <section id="vista-inventario" class="vista-page">
                 <div class="page-title flex-between">
-                    <div>
-                        <h2>Inventario General de Bodega</h2>
+                    <div class="vista-header">
+                        <h2>Inventario General</h2>
                         <p>Catálogo de piezas, rollos, bultos y paquetes almacenados.</p>
                     </div>
                     <div class="btn-group">
@@ -218,7 +212,6 @@
                                 <th>Color</th>
                                 <th>Composición</th>
                                 <th>Tipo</th>
-                                <th>Bodega</th>
                                 <th>Acciones</th>
                             </tr>
                         </thead>
@@ -358,7 +351,6 @@
                                 <div><strong>Color:</strong> <span id="scan-color">-</span></div>
                                 <div><strong>Composición:</strong> <span id="scan-composicion">-</span></div>
                                 <div><strong>Tipo Empaque:</strong> <span id="scan-tipo">-</span></div>
-                                <div><strong>Bodega:</strong> <span id="scan-bodega">-</span></div>
                                 <div><strong>Fecha Reg:</strong> <span id="scan-fecha">-</span></div>
                             </div>
                             <div class="detail-actions">
@@ -385,10 +377,9 @@
                     <table class="data-table">
                         <thead>
                             <tr>
-                                <th>Fecha y Hora</th>
+                                <th>Fecha</th>
                                 <th>Usuario</th>
                                 <th>Acción</th>
-                                <th>Bodega</th>
                                 <th>Detalle</th>
                             </tr>
                         </thead>

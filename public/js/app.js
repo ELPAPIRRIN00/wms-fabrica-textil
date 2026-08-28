@@ -11,7 +11,6 @@
     const App = {
         usuario: null,
         rol: null,
-        bodegaActiva: 1,
         vistaActual: 'dashboard',
         chartInstancia: null,
         productoEscaneadoActual: null,
@@ -23,15 +22,13 @@
         pollingInterval: null,
         gruposAbiertos: {},
         storageKeys: {
-            inventarioBodega1: 'ham_wms_inventario_bodega_1',
-            inventarioBodega2: 'ham_wms_inventario_bodega_2',
-            bitacora: 'ham_wms_bitacora'
+            inventario: 'ham_wms_inventario_general',
+            bitacora: 'ham_wms_bitacora_general'
         },
 
         cuentas: {
             admin: { password: '1234', nombre: 'Administrador' },
-            oper1: { password: '1234', nombre: 'Operador 1', bodega: 1 },
-            oper2: { password: '1234', nombre: 'Operador 2', bodega: 2 }
+            operador: { password: '1234', nombre: 'Operador' }
         },
 
         /* ---------- Inicialización ---------- */
@@ -113,7 +110,7 @@
             if (!selector) return;
 
             const actual = selector.value;
-            const familias = [...new Set(this.productosDeBodegaActiva()
+            const familias = [...new Set(this.productosActivos()
                 .map(item => item.nombre_producto || item.tela)
                 .filter(Boolean))]
                 .sort((a, b) => a.localeCompare(b, 'es'));
@@ -138,7 +135,6 @@
                 color: String(item.color || '').trim(),
                 composicion: String(item.composicion || '').trim(),
                 tipo: String(item.tipo || item.presentacion || 'ROLLO').toUpperCase(),
-                bodega: Number(item.bodega) === 2 ? 2 : 1,
                 estado: item.estado || 'Activo'
             };
         },
@@ -153,15 +149,7 @@
                 }
             };
 
-            const bodega1 = leer(this.storageKeys.inventarioBodega1);
-            const bodega2 = leer(this.storageKeys.inventarioBodega2);
-            const inventarioAnterior = leer('ham_wms_inventario');
-            this.inventario = [...bodega1, ...bodega2];
-
-            if (this.inventario.length === 0 && inventarioAnterior.length > 0) {
-                this.inventario = inventarioAnterior.map(item => this.normalizarProducto(item));
-                this.guardarRespaldoLocal();
-            }
+            this.inventario = leer(this.storageKeys.inventario);
 
             try {
                 const bitacora = JSON.parse(localStorage.getItem(this.storageKeys.bitacora) || '[]');
@@ -172,15 +160,12 @@
         },
 
         guardarRespaldoLocal() {
-            const bodega1 = this.inventario.filter(item => Number(item.bodega) === 1);
-            const bodega2 = this.inventario.filter(item => Number(item.bodega) === 2);
-            localStorage.setItem(this.storageKeys.inventarioBodega1, JSON.stringify(bodega1));
-            localStorage.setItem(this.storageKeys.inventarioBodega2, JSON.stringify(bodega2));
+            localStorage.setItem(this.storageKeys.inventario, JSON.stringify(this.inventario));
             localStorage.setItem(this.storageKeys.bitacora, JSON.stringify(this.bitacora));
         },
 
-        productosDeBodegaActiva() {
-            return this.inventario.filter(item => Number(item.bodega) === this.bodegaActiva && item.estado !== 'Merma/Defecto');
+        productosActivos() {
+            return this.inventario.filter(item => item.estado !== 'Merma/Defecto');
         },
 
         actualizarStatusBadge(online) {
@@ -220,8 +205,7 @@
             if (cuenta && cuenta.password === password) {
                 this.usuario = cuenta.nombre;
                 this.rol = usuario === 'admin' ? 'Administrador' : 'Operador';
-                if (cuenta.bodega) this.bodegaActiva = cuenta.bodega;
-                localStorage.setItem('ham_wms_session', JSON.stringify({ usuario: this.usuario, rol: this.rol, bodega: cuenta.bodega || null }));
+                localStorage.setItem('ham_wms_session', JSON.stringify({ usuario: this.usuario, rol: this.rol }));
                 document.getElementById('login-modal').classList.remove('active');
                 this.mostrarAppShell();
                 this.mostrarToast(`Bienvenido al sistema, ${this.usuario}`, 'success');
@@ -241,14 +225,21 @@
             document.getElementById('user-display-role').textContent = this.rol;
             const dashboardButton = document.querySelector('[data-target="dashboard"]');
             const exportButton = document.getElementById('btn-export-csv');
-            const warehouseSelect = document.getElementById('select-bodega');
             const operador = this.rol === 'Operador';
             if (dashboardButton) dashboardButton.hidden = operador;
             if (exportButton) exportButton.hidden = operador;
-            if (operador && this.bodegaActiva) {
-                warehouseSelect.value = String(this.bodegaActiva);
-                warehouseSelect.disabled = true;
+
+            if (operador && this.vistaActual === 'dashboard') {
+                this.vistaActual = 'inventario';
+                document.querySelectorAll('.vista-page').forEach(page => page.classList.remove('active'));
+                document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
+                
+                const targetPage = document.getElementById('vista-inventario');
+                const targetBtn = document.querySelector('[data-target="inventario"]');
+                if (targetPage) targetPage.classList.add('active');
+                if (targetBtn) targetBtn.classList.add('active');
             }
+
             this.renderizarTodo();
         },
 
@@ -306,18 +297,9 @@
             // Logout
             document.getElementById('btn-logout').addEventListener('click', () => this.cerrarSesion());
 
-            // Bodega Selector
-            document.getElementById('select-bodega').addEventListener('change', (e) => {
-                if (this.rol === 'Operador') return;
-                this.bodegaActiva = parseInt(e.target.value, 10);
-                this.poblarFamiliasProducto();
-                this.mostrarToast(`Cambiado a Bodega ${this.bodegaActiva}`, 'info');
-                this.renderizarTodo();
-            });
-
             document.getElementById('reg-producto-existente').addEventListener('change', (e) => {
                 if (!e.target.value) return;
-                const producto = this.productosDeBodegaActiva().find(item =>
+                const producto = this.productosActivos().find(item =>
                     (item.nombre_producto || item.tela) === e.target.value
                 );
                 document.getElementById('reg-nombre').value = e.target.value;
@@ -473,7 +455,7 @@
             const busqueda = document.getElementById('input-search-inventario').value.toLowerCase();
             const filtroTipo = document.getElementById('filter-tipo').value;
 
-            const filtrados = this.productosDeBodegaActiva().filter(item => {
+            const filtrados = this.productosActivos().filter(item => {
                 const conc = `${item.id} ${item.nombre_producto} ${item.color} ${item.composicion}`.toLowerCase();
                 const cumpleBusqueda = conc.includes(busqueda);
                 const cumpleTipo = filtroTipo === 'TODOS' || item.tipo === filtroTipo;
@@ -481,7 +463,7 @@
             });
 
             if (filtrados.length === 0) {
-                tbody.innerHTML = `<tr><td colspan="9" style="text-align:center; padding:30px; color:#64748b;">No se encontraron registros de inventario.</td></tr>`;
+                tbody.innerHTML = `<tr><td colspan="8" style="text-align:center; padding:30px; color:#64748b;">No se encontraron registros de inventario.</td></tr>`;
                 return;
             }
 
@@ -511,7 +493,6 @@
                     <td>${item.color}</td>
                     <td>${item.composicion}</td>
                     <td><span class="badge badge-type">${item.tipo || item.presentacion}</span></td>
-                    <td>Bodega ${item.bodega}</td>
                     <td>
                         <div class="btn-group-sm">
                             ${accionesAdmin}
@@ -529,7 +510,7 @@
 
                 return `
                     <tr class="inventory-group-row">
-                        <td colspan="9" style="position: relative;">
+                        <td colspan="8" style="position: relative;">
                             <button type="button" class="inventory-group-toggle" data-group="${nombre}" aria-expanded="${abierto}" style="display:inline-block; border: none; background: transparent; cursor: pointer; text-align: left; width: 100%;">
                                 <i class="ph ph-caret-${abierto ? 'down' : 'right'}"></i>
                                 <strong>${nombre}</strong>
@@ -552,7 +533,6 @@
                     <td style="font-size:0.85rem; color:#94a3b8;">${b.fecha}</td>
                     <td><strong>${b.usuario}</strong></td>
                     <td><span class="badge">${b.accion}</span></td>
-                    <td>${b.bodega}</td>
                     <td>${b.detalle}</td>
                 </tr>
             `).join('');
@@ -599,7 +579,6 @@
                 color,
                 composicion,
                 tipo,
-                bodega: this.bodegaActiva,
                 fecha: this.obtenerFechaActual(),
                 estado: 'Activo'
             }));
@@ -693,7 +672,7 @@
                 const canvas = temp.querySelector('canvas');
                 const source = image?.src || canvas?.toDataURL('image/png');
                 if (source) {
-                    printArea.insertAdjacentHTML('beforeend', `<section class="print-label"><h2>H.A.M. POO WMS</h2><h3>${producto.nombre_producto}</h3><img src="${source}" alt="QR ${producto.id}"><p><strong>${producto.id}</strong></p><p>Bodega ${producto.bodega} | ${producto.tipo}</p></section>`);
+                    printArea.insertAdjacentHTML('beforeend', `<section class="print-label"><h2>H.A.M. POO WMS</h2><h3>${producto.nombre_producto}</h3><img src="${source}" alt="QR ${producto.id}"><p><strong>${producto.id}</strong></p><p>${producto.tipo}</p></section>`);
                 }
                 temp.remove();
             });
@@ -703,10 +682,6 @@
             const producto = this.inventario.find(item => item.id === id);
             if (!producto) {
                 this.mostrarToast('No se encontró el producto para generar su QR.', 'warning');
-                return;
-            }
-            if (Number(producto.bodega) !== this.bodegaActiva) {
-                this.mostrarToast(`El producto pertenece a Bodega ${producto.bodega}.`, 'warning');
                 return;
             }
             if (typeof QRCode === 'undefined') {
@@ -731,7 +706,6 @@
                 <span><strong>Stock:</strong> ${producto.stock_pz ?? producto.metros ?? 0} pz</span>
                 <span><strong>Color:</strong> ${producto.color || 'N/A'}</span>
                 <span><strong>Tipo:</strong> ${producto.tipo || producto.presentacion || 'N/A'}</span>
-                <span><strong>Bodega:</strong> ${producto.bodega}</span>
             `;
             document.getElementById('modal-qr-detalle').classList.add('active');
         },
@@ -760,7 +734,7 @@
             }
             const producto = this.productoQRActual;
             const printArea = document.getElementById('print-area');
-            printArea.innerHTML = `<section class="print-label"><h2>H.A.M. POO WMS</h2><h3>${producto.nombre_producto || producto.tela || producto.id}</h3><img src="${dataUrl}" alt="QR ${producto.id}"><p><strong>${producto.id}</strong></p><p>Bodega ${producto.bodega}</p></section>`;
+            printArea.innerHTML = `<section class="print-label"><h2>H.A.M. POO WMS</h2><h3>${producto.nombre_producto || producto.tela || producto.id}</h3><img src="${dataUrl}" alt="QR ${producto.id}"><p><strong>${producto.id}</strong></p></section>`;
             window.print();
         },
 
@@ -821,12 +795,6 @@
 
         async procesarLecturaQR(codigoEscaneado) {
             const cleanId = codigoEscaneado.trim();
-            const productoLocal = this.inventario.find(item => item.id === cleanId);
-            if (productoLocal && Number(productoLocal.bodega) !== this.bodegaActiva) {
-                this.mostrarToast(`El producto pertenece a Bodega ${productoLocal.bodega}. Cambia la bodega activa para consultarlo.`, 'warning');
-                this.ocultarDetallesEscaneo();
-                return;
-            }
 
             try {
                 const res = await fetch(`/api/productos/${encodeURIComponent(cleanId)}`);
@@ -840,11 +808,6 @@
                 const producto = await res.json();
                 if (producto.estado === 'Merma/Defecto') {
                     this.mostrarToast(`⚠️ El producto (${cleanId}) se encuentra en estado MERMA/DEFECTO.`, 'danger');
-                    this.ocultarDetallesEscaneo();
-                    return;
-                }
-                if (Number(producto.bodega) !== this.bodegaActiva) {
-                    this.mostrarToast(`El producto pertenece a Bodega ${producto.bodega}.`, 'warning');
                     this.ocultarDetallesEscaneo();
                     return;
                 }
@@ -868,7 +831,6 @@
             document.getElementById('scan-color').textContent = producto.color;
             document.getElementById('scan-composicion').textContent = producto.composicion;
             document.getElementById('scan-tipo').textContent = producto.tipo || producto.presentacion;
-            document.getElementById('scan-bodega').textContent = `Bodega ${producto.bodega}`;
             document.getElementById('scan-fecha').textContent = producto.fecha;
         },
 
@@ -984,7 +946,7 @@
                 const res = await fetch(`/api/productos/tipo/${encodeURIComponent(nombre)}`, {
                     method: 'DELETE',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ motivo: motivo, usuario: this.usuario, bodega: this.bodegaActiva })
+                    body: JSON.stringify({ motivo: motivo, usuario: this.usuario })
                 });
 
                 if (!res.ok) {
@@ -1073,7 +1035,7 @@
                 fecha: this.obtenerFechaActual(),
                 usuario: this.usuario || 'Sistema',
                 accion,
-                bodega: `Bodega ${this.bodegaActiva}`,
+                bodega: 'General',
                 detalle
             };
 
