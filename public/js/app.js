@@ -16,6 +16,8 @@
         productoEscaneadoActual: null,
         productoQRActual: null,
         html5QrcodeScanner: null,
+        ultimoQrEscaneado: null,
+        ultimoQrTiempo: 0,
         inventario: [],
         bitacora: [],
         useBackend: true,
@@ -395,6 +397,33 @@
                     e.preventDefault();
                     ejecutarManualScan();
                 }
+            });
+
+            // Modal Continuidad Post-Salida (Escanear Otro QR)
+            document.getElementById('btn-modal-escanear-otro')?.addEventListener('click', () => {
+                document.getElementById('modal-escanear-otro')?.classList.remove('active');
+                const inputManual = document.getElementById('input-manual-scan');
+                if (inputManual) inputManual.value = '';
+                this.ocultarDetallesEscaneo();
+                this.ultimoQrEscaneado = null;
+                this.ultimoQrTiempo = 0;
+                if (this.html5QrcodeScanner) {
+                    try {
+                        this.html5QrcodeScanner.resume();
+                    } catch (e) {
+                        this.iniciarCamaraScanner();
+                    }
+                } else {
+                    this.iniciarCamaraScanner();
+                }
+                this.mostrarToast('Lector listo para escanear el siguiente código QR.', 'info');
+            });
+
+            document.getElementById('btn-modal-ver-inventario')?.addEventListener('click', () => {
+                document.getElementById('modal-escanear-otro')?.classList.remove('active');
+                this.ocultarDetallesEscaneo();
+                const navInv = document.querySelector('[data-target="inventario"]');
+                if (navInv) navInv.click();
             });
 
             // Modal Editar
@@ -832,6 +861,19 @@
             const cleanId = String(codigoEscaneado || '').trim();
             if (!cleanId) return;
 
+            // Evitar duplicados por escaneo en bucle continuo de cámara
+            if (this.ultimoQrEscaneado === cleanId && (Date.now() - (this.ultimoQrTiempo || 0)) < 3500) {
+                return;
+            }
+
+            this.ultimoQrEscaneado = cleanId;
+            this.ultimoQrTiempo = Date.now();
+
+            // Pausar lectura de la cámara al detectar un QR
+            if (this.html5QrcodeScanner) {
+                try { this.html5QrcodeScanner.pause(true); } catch (e) {}
+            }
+
             try {
                 let producto = null;
                 if (this.useBackend) {
@@ -846,14 +888,26 @@
                 }
 
                 if (!producto) {
-                    this.mostrarToast(`⚠️ El producto (${cleanId}) no fue encontrado en la Base de Datos.`, 'danger');
+                    this.mostrarToast(`⚠️ El código QR (${cleanId}) no fue encontrado en la Base de Datos.`, 'danger');
                     this.ocultarDetallesEscaneo();
+                    if (this.html5QrcodeScanner) {
+                        try { this.html5QrcodeScanner.resume(); } catch (e) {}
+                    }
+                    return;
+                }
+
+                if (producto.estado === 'Salida' || (parseInt(producto.stock_pz, 10) || 0) <= 0) {
+                    this.mostrarToast(`⚠️ La pieza (${cleanId}) ya fue procesada como SALIDA previamente.`, 'warning');
+                    this.mostrarDetallesEscaneo(producto);
                     return;
                 }
 
                 if (producto.estado === 'Merma/Defecto') {
-                    this.mostrarToast(`⚠️ El producto (${cleanId}) se encuentra en estado MERMA/DEFECTO.`, 'danger');
+                    this.mostrarToast(`⚠️ La pieza (${cleanId}) se encuentra en estado MERMA/DEFECTO.`, 'danger');
                     this.ocultarDetallesEscaneo();
+                    if (this.html5QrcodeScanner) {
+                        try { this.html5QrcodeScanner.resume(); } catch (e) {}
+                    }
                     return;
                 }
 
@@ -891,13 +945,23 @@
 
             // Ajustar estado visual según stock
             const badgeStatus = document.getElementById('scan-status');
+            const btnDescontar = document.getElementById('btn-scan-descontar');
+
             if (badgeStatus) {
                 if (producto.estado === 'Salida' || stockVal <= 0) {
                     badgeStatus.className = 'badge badge-danger';
-                    badgeStatus.textContent = 'AGOTADO (STOCK 0)';
+                    badgeStatus.textContent = 'PROCESADA (SALIDA REALIZADA)';
+                    if (btnDescontar) {
+                        btnDescontar.disabled = true;
+                        btnDescontar.innerHTML = '<i class="ph ph-check-circle"></i> Salida ya registrada';
+                    }
                 } else {
                     badgeStatus.className = 'badge badge-success';
                     badgeStatus.textContent = 'DISPONIBLE EN BODEGA';
+                    if (btnDescontar) {
+                        btnDescontar.disabled = false;
+                        btnDescontar.innerHTML = '<i class="ph ph-box-arrow-up"></i> Registrar Salida de esta Pieza';
+                    }
                 }
             }
 
@@ -921,25 +985,25 @@
             }
 
             if (this.rol !== 'Administrador' && this.rol !== 'Operador') {
-                this.mostrarToast('No tienes permisos para descontar stock.', 'warning');
+                this.mostrarToast('No tienes permisos para registrar salidas.', 'warning');
                 return;
             }
 
+            const idEscaneado = this.productoEscaneadoActual.id;
+            const nombrePieza = this.productoEscaneadoActual.nombre_producto || this.productoEscaneadoActual.tela || idEscaneado;
             let stockActual = parseInt(this.productoEscaneadoActual.stock_pz, 10);
             if (isNaN(stockActual)) stockActual = parseInt(this.productoEscaneadoActual.metros || 0, 10);
 
-            if (stockActual <= 0) {
-                this.mostrarToast('La pieza ya no tiene stock disponible (0 pz).', 'warning');
+            if (this.productoEscaneadoActual.estado === 'Salida' || stockActual <= 0) {
+                this.mostrarToast(`La pieza ${idEscaneado} ya fue procesada como salida previamente.`, 'warning');
                 return;
             }
 
-            const nuevoStock = stockActual - 1;
-            const nuevoEstado = nuevoStock === 0 ? 'Salida' : (this.productoEscaneadoActual.estado || 'Activo');
-
+            // Registrar la salida de esta pieza única (stock 0, estado Salida)
             const productoActualizado = {
                 ...this.productoEscaneadoActual,
-                stock_pz: nuevoStock,
-                estado: nuevoEstado
+                stock_pz: 0,
+                estado: 'Salida'
             };
 
             try {
@@ -951,7 +1015,7 @@
                     });
                     if (!res.ok) {
                         const errData = await res.json().catch(() => ({}));
-                        throw new Error(errData.message || 'No se pudo actualizar el stock');
+                        throw new Error(errData.message || 'No se pudo registrar la salida de la pieza');
                     }
                 } else {
                     const idx = this.inventario.findIndex(i => i.id === productoActualizado.id);
@@ -961,10 +1025,20 @@
                     this.guardarRespaldoLocal();
                 }
 
-                await this.registrarBitacora('Salida de Stock (1 Pz)', `Pieza ${productoActualizado.id}: Descontada 1 pz por ${this.usuario || 'Usuario'}. Quedan: ${nuevoStock} pz`);
-                this.mostrarDetallesEscaneo(productoActualizado);
-                this.mostrarToast(`✅ Salida de 1 pz registrada (${productoActualizado.id}). Stock restante: ${nuevoStock} pz`, 'success');
+                await this.registrarBitacora('Salida de Producto (QR)', `Pieza ${idEscaneado} (${nombrePieza}): Salida procesada por ${this.usuario || 'Usuario'}.`);
                 await this.cargarDatos();
+
+                // Ocultar detalles del escáner
+                this.ocultarDetallesEscaneo();
+
+                // Abrir modal de confirmación post-salida ("¿Deseas escanear otro QR?")
+                const modalMsg = document.getElementById('modal-escanear-otro-msg');
+                if (modalMsg) {
+                    modalMsg.textContent = `Salida de la pieza ${idEscaneado} (${nombrePieza}) registrada con éxito.`;
+                }
+
+                const modalOtro = document.getElementById('modal-escanear-otro');
+                if (modalOtro) modalOtro.classList.add('active');
 
             } catch (e) {
                 this.mostrarToast(`❌ Error al registrar salida: ${e.message}`, 'danger');

@@ -364,11 +364,11 @@
                                 <div><strong>Tipo Empaque:</strong> <span id="scan-tipo">-</span></div>
                                 <div><strong>Fecha Reg:</strong> <span id="scan-fecha">-</span></div>
                             </div>
-                            <div class="detail-actions" style="margin-top: 15px; display: flex; gap: 10px; flex-wrap: wrap;">
-                                <button id="btn-scan-descontar" class="btn btn-warning">
-                                    <i class="ph ph-minus-circle"></i> Descontar 1 Pz (Salida)
+                            <div class="detail-actions">
+                                <button id="btn-scan-descontar" class="btn btn-primary btn-block">
+                                    <i class="ph ph-box-arrow-up"></i> Registrar Salida de esta Pieza
                                 </button>
-                                <button id="btn-scan-eliminar" class="btn btn-outline danger">
+                                <button id="btn-scan-eliminar" class="btn btn-outline danger btn-block">
                                     <i class="ph ph-trash"></i> Eliminar Registro (Admin)
                                 </button>
                             </div>
@@ -489,6 +489,25 @@
                     <button type="submit" class="btn btn-danger">Eliminar Familia Completa</button>
                 </div>
             </form>
+        </div>
+    </div>
+
+    <!-- Modal Continuidad Post-Salida: Escanear Otro QR -->
+    <div id="modal-escanear-otro" class="modal-overlay">
+        <div class="modal-box text-center" style="text-align: center;">
+            <div style="font-size: 3.5rem; color: var(--success); margin-bottom: 12px;">
+                <i class="ph ph-check-circle"></i>
+            </div>
+            <h3 style="justify-content: center; font-size: 1.35rem;">Salida Registrada con Éxito</h3>
+            <p id="modal-escanear-otro-msg" style="margin-bottom: 20px; font-weight: 500;">Se ha procesado la salida de la pieza correctamente.</p>
+            <div class="modal-actions" style="justify-content: center; flex-wrap: wrap; gap: 12px;">
+                <button type="button" class="btn btn-primary" id="btn-modal-escanear-otro" style="padding: 12px 20px;">
+                    <i class="ph ph-camera"></i> Escanear otro QR
+                </button>
+                <button type="button" class="btn btn-outline" id="btn-modal-ver-inventario" style="padding: 12px 20px;">
+                    <i class="ph ph-package"></i> Ir a Inventario
+                </button>
+            </div>
         </div>
     </div>
 
