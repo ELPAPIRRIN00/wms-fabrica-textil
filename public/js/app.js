@@ -567,20 +567,22 @@
                 }).join('') : '';
 
                 const accionesFamiliaAdmin = this.rol === 'Administrador' ? `
-                    <button type="button" class="btn btn-danger btn-sm" data-action="delete-type" data-name="${nombre}" data-count="${items.length}" title="Eliminar familia completa" style="float: right; margin-top: -4px;">
+                    <button type="button" class="btn btn-danger btn-sm btn-delete-family" data-action="delete-type" data-name="${nombre}" data-count="${items.length}" title="Eliminar familia completa">
                         <i class="ph ph-trash"></i> Eliminar Familia
                     </button>
                 ` : '';
 
                 return `
                     <tr class="inventory-group-row">
-                        <td colspan="8" style="position: relative;">
-                            <button type="button" class="inventory-group-toggle" data-group="${nombre}" aria-expanded="${abierto}" style="display:inline-block; border: none; background: transparent; cursor: pointer; text-align: left; width: 100%;">
-                                <i class="ph ph-caret-${abierto ? 'down' : 'right'}"></i>
-                                <strong>${nombre}</strong>
-                                <span class="group-summary">${items.length} pieza(s) | Stock total: ${totalStock} pz</span>
-                            </button>
-                            ${accionesFamiliaAdmin}
+                        <td colspan="8">
+                            <div class="inventory-group-header">
+                                <button type="button" class="inventory-group-toggle" data-group="${nombre}" aria-expanded="${abierto}">
+                                    <i class="ph ph-caret-${abierto ? 'down' : 'right'}"></i>
+                                    <strong>${nombre}</strong>
+                                    <span class="group-summary">${items.length} pieza(s) | Stock total: ${totalStock} pz</span>
+                                </button>
+                                ${accionesFamiliaAdmin}
+                            </div>
                         </td>
                     </tr>
                     ${filas}
