@@ -257,6 +257,58 @@ app.delete('/api/productos/:id', async (req, res) => {
     }
 });
 
+// 4b. Eliminar productos por familia/tipo (Soft delete masivo)
+app.delete('/api/productos/tipo/:nombre', async (req, res) => {
+    try {
+        const { nombre } = req.params;
+        const cleanNombre = String(nombre).trim();
+        const motivo = String(req.body?.motivo || '').trim();
+        const usuario = String(req.body?.usuario || 'Administrador').trim();
+        const bodega = parseInt(req.body?.bodega, 10) || 1;
+
+        if (!motivo) {
+            return res.status(400).json({ status: 'error', message: 'El motivo de baja es obligatorio.' });
+        }
+
+        if (pool) {
+            const result = await pool.query(
+                "UPDATE inventario SET estado = 'Merma/Defecto' WHERE (nombre_producto = $1 OR tela = $1) AND bodega = $2 AND estado != 'Merma/Defecto' RETURNING *",
+                [cleanNombre, bodega]
+            );
+            if (result.rowCount === 0) {
+                return res.status(404).json({ status: 'error', message: 'No se encontraron productos activos de esta familia en la bodega seleccionada.' });
+            }
+        } else {
+            let actualizados = 0;
+            fallbackInventario.forEach(item => {
+                if ((item.nombre_producto === cleanNombre || item.tela === cleanNombre) && Number(item.bodega) === bodega && item.estado !== 'Merma/Defecto') {
+                    item.estado = 'Merma/Defecto';
+                    actualizados++;
+                }
+            });
+            if (actualizados === 0) {
+                 return res.status(404).json({ status: 'error', message: 'No se encontraron productos activos de esta familia.' });
+            }
+        }
+
+        const detalleBitacora = `Baja masiva de familia "${cleanNombre}": ${motivo}`;
+        const fechaReg = new Date().toLocaleString('es-MX');
+        
+        if (pool) {
+             await pool.query(
+                'INSERT INTO bitacora (fecha, usuario, accion, bodega, detalle) VALUES ($1, $2, $3, $4, $5)',
+                [fechaReg, usuario, 'Baja por merma/defecto', `Bodega ${bodega}`, detalleBitacora]
+            );
+        } else {
+             fallbackBitacora.unshift({ id: Date.now(), fecha: fechaReg, usuario: usuario, accion: 'Baja por merma/defecto', bodega: `Bodega ${bodega}`, detalle: detalleBitacora });
+        }
+
+        res.json({ status: 'ok', message: `Familia de productos '${cleanNombre}' dada de baja correctamente.` });
+    } catch (err) {
+        handleError(err, res);
+    }
+});
+
 // 5. Obtener bitácora
 app.get('/api/bitacora', async (req, res) => {
     try {

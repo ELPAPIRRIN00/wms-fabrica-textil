@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="description" content="Sistema de Gestión de Almacén (WMS) Textil Industrial — H.A.M. Poo">
-    <meta name="theme-color" content="#0b0f19">
+    <meta name="theme-color" content="#f8fafc">
     <title>H.A.M. Poo | WMS Textil Industrial</title>
 
     <!-- 📦 Dependencias CDN -->
@@ -21,7 +21,7 @@
     <!-- 🎨 Estilos -->
     <link rel="stylesheet" href="css/styles.css">
 </head>
-<body class="dark-theme">
+<body class="light-theme">
     <div class="mobile-topbar">
         <button id="btn-mobile-menu" class="btn-icon" type="button" aria-label="Abrir menú">
             <i class="ph ph-list"></i>
@@ -467,6 +467,26 @@
                     <i class="ph ph-printer"></i> Imprimir etiqueta
                 </button>
             </div>
+        </div>
+    </div>
+
+    <!-- Modal Confirmar Eliminación por Tipo -->
+    <div id="modal-confirm-delete-type" class="modal-overlay">
+        <div class="modal-box">
+            <h3><i class="ph ph-warning" style="color:var(--danger)"></i> Confirmar Baja de Familia</h3>
+            <p>Se dará de baja toda la familia: <strong id="delete-type-name"></strong>.</p>
+            <p>Piezas afectadas: <strong id="delete-type-count"></strong>.</p>
+            <form id="form-delete-type">
+                <input type="hidden" id="delete-type-hidden-name">
+                <div class="input-group">
+                    <label for="delete-type-motivo">Motivo de la baja masiva:</label>
+                    <input type="text" id="delete-type-motivo" placeholder="Ej. Merma, Defecto de fábrica" required>
+                </div>
+                <div class="modal-actions">
+                    <button type="button" class="btn btn-outline" id="btn-cancelar-delete-type">Cancelar</button>
+                    <button type="submit" class="btn btn-danger">Eliminar Familia Completa</button>
+                </div>
+            </form>
         </div>
     </div>
 

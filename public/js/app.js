@@ -355,10 +355,16 @@
             });
 
             document.getElementById('tbody-inventario').addEventListener('click', (e) => {
+                const deleteTypeBtn = e.target.closest('[data-action="delete-type"]');
+                if (deleteTypeBtn) {
+                    this.abrirModalEliminarTipo(deleteTypeBtn.dataset.name, deleteTypeBtn.dataset.count);
+                    e.stopPropagation();
+                    return;
+                }
                 const groupButton = e.target.closest('[data-group]');
                 if (!groupButton) return;
                 const grupo = groupButton.dataset.group;
-                this.gruposAbiertos[grupo] = this.gruposAbiertos[grupo] !== false ? false : true;
+                this.gruposAbiertos[grupo] = !(this.gruposAbiertos[grupo] !== false);
                 this.renderizarTablaInventario();
             });
 
@@ -388,6 +394,15 @@
             document.getElementById('form-editar').addEventListener('submit', (e) => {
                 e.preventDefault();
                 this.guardarEdicionProducto();
+            });
+
+            // Modal Eliminar Familia
+            document.getElementById('btn-cancelar-delete-type')?.addEventListener('click', () => {
+                document.getElementById('modal-confirm-delete-type').classList.remove('active');
+            });
+            document.getElementById('form-delete-type')?.addEventListener('submit', (e) => {
+                e.preventDefault();
+                this.eliminarTipoProducto();
             });
         },
 
@@ -445,7 +460,7 @@
                     responsive: true,
                     maintainAspectRatio: false,
                     plugins: {
-                        legend: { position: 'bottom', labels: { color: '#94a3b8' } }
+                        legend: { position: 'bottom', labels: { color: '#1e293b' } }
                     }
                 }
             });
@@ -506,14 +521,21 @@
                 `;
                 }).join('') : '';
 
+                const accionesFamiliaAdmin = this.rol === 'Administrador' ? `
+                    <button type="button" class="btn btn-danger btn-sm" data-action="delete-type" data-name="${nombre}" data-count="${items.length}" title="Eliminar familia completa" style="float: right; margin-top: -4px;">
+                        <i class="ph ph-trash"></i> Eliminar Familia
+                    </button>
+                ` : '';
+
                 return `
                     <tr class="inventory-group-row">
-                        <td colspan="9">
-                            <button type="button" class="inventory-group-toggle" data-group="${nombre}" aria-expanded="${abierto}">
+                        <td colspan="9" style="position: relative;">
+                            <button type="button" class="inventory-group-toggle" data-group="${nombre}" aria-expanded="${abierto}" style="display:inline-block; border: none; background: transparent; cursor: pointer; text-align: left; width: 100%;">
                                 <i class="ph ph-caret-${abierto ? 'down' : 'right'}"></i>
                                 <strong>${nombre}</strong>
                                 <span class="group-summary">${items.length} pieza(s) | Stock total: ${totalStock} pz</span>
                             </button>
+                            ${accionesFamiliaAdmin}
                         </td>
                     </tr>
                     ${filas}
@@ -935,6 +957,50 @@
             }
         },
 
+        /* ---------- ELIMINACIÓN DE TIPO / FAMILIA ---------- */
+        abrirModalEliminarTipo(nombre, count) {
+            if (this.rol !== 'Administrador') {
+                this.mostrarToast('Solo el administrador puede eliminar familias.', 'warning');
+                return;
+            }
+            document.getElementById('delete-type-name').textContent = nombre;
+            document.getElementById('delete-type-count').textContent = count;
+            document.getElementById('delete-type-hidden-name').value = nombre;
+            document.getElementById('delete-type-motivo').value = '';
+            document.getElementById('modal-confirm-delete-type').classList.add('active');
+        },
+
+        async eliminarTipoProducto() {
+            if (this.rol !== 'Administrador') return;
+            const nombre = document.getElementById('delete-type-hidden-name').value;
+            const motivo = document.getElementById('delete-type-motivo').value.trim();
+
+            if (!motivo) {
+                this.mostrarToast('El motivo es obligatorio.', 'warning');
+                return;
+            }
+
+            try {
+                const res = await fetch(`/api/productos/tipo/${encodeURIComponent(nombre)}`, {
+                    method: 'DELETE',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ motivo: motivo, usuario: this.usuario, bodega: this.bodegaActiva })
+                });
+
+                if (!res.ok) {
+                    const errData = await res.json().catch(() => ({}));
+                    throw new Error(errData.message || 'No se pudo eliminar la familia');
+                }
+
+                document.getElementById('modal-confirm-delete-type').classList.remove('active');
+                this.mostrarToast(`Familia ${nombre} dada de baja correctamente`, 'success');
+                await this.cargarDatos();
+
+            } catch (err) {
+                this.mostrarToast(`❌ Error al dar de baja masiva en PostgreSQL: ${err.message}`, 'danger');
+            }
+        },
+
         /* ---------- EDICIÓN ---------- */
         abrirModalEditar(id) {
             if (this.rol !== 'Administrador') {
@@ -1054,7 +1120,8 @@
             if (!container) return;
 
             const toast = document.createElement('div');
-            toast.className = `toast toast-${tipo}`;
+            const mappedTipo = tipo === 'danger' ? 'error' : tipo;
+            toast.className = `toast ${mappedTipo}`;
             toast.innerHTML = `<span>${mensaje}</span>`;
             container.appendChild(toast);
 
