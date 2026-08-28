@@ -330,13 +330,24 @@
                                 <i class="ph ph-camera-slash"></i> Detener
                             </button>
                         </div>
+                        <div class="manual-scan-box" style="margin-top: 15px; padding-top: 15px; border-top: 1px solid rgba(0,0,0,0.1);">
+                            <label for="input-manual-scan" style="font-size: 0.85rem; font-weight: 600; display: block; margin-bottom: 6px;">
+                                <i class="ph ph-magnifying-glass"></i> Consulta / Búsqueda manual por ID QR:
+                            </label>
+                            <div class="input-with-btn" style="display: flex; gap: 8px;">
+                                <input type="text" id="input-manual-scan" placeholder="Ej. HAM-1001" style="flex:1;">
+                                <button type="button" id="btn-manual-scan" class="btn btn-secondary">
+                                    <i class="ph ph-magnifying-glass"></i> Consultar ID
+                                </button>
+                            </div>
+                        </div>
                     </div>
 
                     <!-- Resultado de Escaneo -->
                     <div class="card-result" id="scanner-result-box">
                         <div class="empty-state" id="scanner-empty-state">
                             <i class="ph ph-qr-code"></i>
-                            <p>Apunta la cámara al código QR del producto para consultar su estado en tiempo real.</p>
+                            <p>Apunta la cámara al código QR del producto o ingresa su ID manualmente para identificar la pieza y consultar sus detalles.</p>
                         </div>
 
                         <div id="scanner-details" class="scanned-details hidden">
@@ -353,12 +364,12 @@
                                 <div><strong>Tipo Empaque:</strong> <span id="scan-tipo">-</span></div>
                                 <div><strong>Fecha Reg:</strong> <span id="scan-fecha">-</span></div>
                             </div>
-                            <div class="detail-actions">
+                            <div class="detail-actions" style="margin-top: 15px; display: flex; gap: 10px; flex-wrap: wrap;">
                                 <button id="btn-scan-descontar" class="btn btn-warning">
-                                    <i class="ph ph-minus-circle"></i> Descontar 1 Pz
+                                    <i class="ph ph-minus-circle"></i> Descontar 1 Pz (Salida)
                                 </button>
                                 <button id="btn-scan-eliminar" class="btn btn-outline danger">
-                                    <i class="ph ph-trash"></i> Eliminar Registro
+                                    <i class="ph ph-trash"></i> Eliminar Registro (Admin)
                                 </button>
                             </div>
                         </div>

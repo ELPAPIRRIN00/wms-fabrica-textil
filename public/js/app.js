@@ -378,6 +378,25 @@
             document.getElementById('btn-scan-descontar')?.addEventListener('click', () => this.descontarStockEscaneado());
             document.getElementById('btn-scan-eliminar')?.addEventListener('click', () => this.eliminarProductoEscaneado());
 
+            // Búsqueda Manual por ID QR
+            const btnManualScan = document.getElementById('btn-manual-scan');
+            const inputManualScan = document.getElementById('input-manual-scan');
+            const ejecutarManualScan = () => {
+                const val = inputManualScan?.value?.trim();
+                if (!val) {
+                    this.mostrarToast('Ingresa un ID de producto para consultar.', 'warning');
+                    return;
+                }
+                this.procesarLecturaQR(val);
+            };
+            btnManualScan?.addEventListener('click', ejecutarManualScan);
+            inputManualScan?.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter') {
+                    e.preventDefault();
+                    ejecutarManualScan();
+                }
+            });
+
             // Modal Editar
             document.getElementById('btn-cancelar-editar')?.addEventListener('click', () => {
                 document.getElementById('modal-editar')?.classList.remove('active');
@@ -810,87 +829,145 @@
         },
 
         async procesarLecturaQR(codigoEscaneado) {
-            const cleanId = codigoEscaneado.trim();
+            const cleanId = String(codigoEscaneado || '').trim();
+            if (!cleanId) return;
 
             try {
-                const res = await fetch(`/api/productos/${encodeURIComponent(cleanId)}`);
+                let producto = null;
+                if (this.useBackend) {
+                    const res = await fetch(`/api/productos/${encodeURIComponent(cleanId)}`);
+                    if (res.ok) {
+                        producto = await res.json();
+                    }
+                }
 
-                if (!res.ok) {
-                    this.mostrarToast(`⚠️ El producto (${cleanId}) ha sido ELIMINADO de la Base de Datos.`, 'danger');
+                if (!producto) {
+                    producto = this.inventario.find(i => String(i.id).toLowerCase() === cleanId.toLowerCase());
+                }
+
+                if (!producto) {
+                    this.mostrarToast(`⚠️ El producto (${cleanId}) no fue encontrado en la Base de Datos.`, 'danger');
                     this.ocultarDetallesEscaneo();
                     return;
                 }
 
-                const producto = await res.json();
                 if (producto.estado === 'Merma/Defecto') {
                     this.mostrarToast(`⚠️ El producto (${cleanId}) se encuentra en estado MERMA/DEFECTO.`, 'danger');
                     this.ocultarDetallesEscaneo();
                     return;
                 }
+
                 this.mostrarDetallesEscaneo(producto);
-                this.mostrarToast(`Producto ${producto.id} detectado correctamente`, 'success');
+                this.mostrarToast(`Pieza ${producto.id} identificada correctamente`, 'success');
 
             } catch (err) {
-                this.mostrarToast('Error consultando la base de datos', 'danger');
+                console.error("Error consultando la base de datos:", err);
+                const localMatch = this.inventario.find(i => String(i.id).toLowerCase() === cleanId.toLowerCase());
+                if (localMatch) {
+                    this.mostrarDetallesEscaneo(localMatch);
+                    this.mostrarToast(`Pieza ${localMatch.id} identificada (Modo Local)`, 'success');
+                } else {
+                    this.mostrarToast('Error consultando la base de datos', 'danger');
+                }
             }
         },
 
         mostrarDetallesEscaneo(producto) {
             this.productoEscaneadoActual = producto;
-            document.getElementById('scanner-empty-state').classList.add('hidden');
-            document.getElementById('scanner-details').classList.remove('hidden');
+            document.getElementById('scanner-empty-state')?.classList.add('hidden');
+            document.getElementById('scanner-details')?.classList.remove('hidden');
+
+            const stockPz = parseInt(producto.stock_pz, 10);
+            const stockVal = isNaN(stockPz) ? parseInt(producto.metros || 0, 10) : stockPz;
 
             document.getElementById('scan-title').textContent = producto.id;
-            document.getElementById('scan-nombre').textContent = producto.nombre_producto || producto.tela;
+            document.getElementById('scan-nombre').textContent = producto.nombre_producto || producto.tela || 'N/A';
             document.getElementById('scan-medidas').textContent = producto.medidas || 'N/A';
-            document.getElementById('scan-stock').textContent = `${producto.stock_pz || producto.metros || 0} pz`;
-            document.getElementById('scan-color').textContent = producto.color;
-            document.getElementById('scan-composicion').textContent = producto.composicion;
-            document.getElementById('scan-tipo').textContent = producto.tipo || producto.presentacion;
-            document.getElementById('scan-fecha').textContent = producto.fecha;
+            document.getElementById('scan-stock').textContent = `${stockVal} pz`;
+            document.getElementById('scan-color').textContent = producto.color || 'N/A';
+            document.getElementById('scan-composicion').textContent = producto.composicion || 'N/A';
+            document.getElementById('scan-tipo').textContent = producto.tipo || producto.presentacion || 'N/A';
+            document.getElementById('scan-fecha').textContent = producto.fecha || 'N/A';
+
+            // Ajustar estado visual según stock
+            const badgeStatus = document.getElementById('scan-status');
+            if (badgeStatus) {
+                if (producto.estado === 'Salida' || stockVal <= 0) {
+                    badgeStatus.className = 'badge badge-danger';
+                    badgeStatus.textContent = 'AGOTADO (STOCK 0)';
+                } else {
+                    badgeStatus.className = 'badge badge-success';
+                    badgeStatus.textContent = 'DISPONIBLE EN BODEGA';
+                }
+            }
+
+            // Visibilidad de botón Eliminar Registro (Solo Administrador)
+            const btnEliminar = document.getElementById('btn-scan-eliminar');
+            if (btnEliminar) {
+                btnEliminar.style.display = this.rol === 'Administrador' ? 'inline-block' : 'none';
+            }
         },
 
         ocultarDetallesEscaneo() {
             this.productoEscaneadoActual = null;
-            document.getElementById('scanner-details').classList.add('hidden');
-            document.getElementById('scanner-empty-state').classList.remove('hidden');
+            document.getElementById('scanner-details')?.classList.add('hidden');
+            document.getElementById('scanner-empty-state')?.classList.remove('hidden');
         },
 
         async descontarStockEscaneado() {
-            if (!this.productoEscaneadoActual || this.rol !== 'Administrador') {
-                this.mostrarToast('Solo el administrador puede descontar stock.', 'warning');
+            if (!this.productoEscaneadoActual) {
+                this.mostrarToast('No hay ninguna pieza escaneada.', 'warning');
+                return;
+            }
+
+            if (this.rol !== 'Administrador' && this.rol !== 'Operador') {
+                this.mostrarToast('No tienes permisos para descontar stock.', 'warning');
                 return;
             }
 
             let stockActual = parseInt(this.productoEscaneadoActual.stock_pz, 10);
+            if (isNaN(stockActual)) stockActual = parseInt(this.productoEscaneadoActual.metros || 0, 10);
+
             if (stockActual <= 0) {
-                this.mostrarToast('El producto ya no tiene stock disponible', 'warning');
+                this.mostrarToast('La pieza ya no tiene stock disponible (0 pz).', 'warning');
                 return;
             }
 
+            const nuevoStock = stockActual - 1;
+            const nuevoEstado = nuevoStock === 0 ? 'Salida' : (this.productoEscaneadoActual.estado || 'Activo');
+
             const productoActualizado = {
                 ...this.productoEscaneadoActual,
-                stock_pz: stockActual - 1
+                stock_pz: nuevoStock,
+                estado: nuevoEstado
             };
 
             try {
-                const res = await fetch('/api/productos', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(productoActualizado)
-                });
-                if (!res.ok) {
-                    const errData = await res.json().catch(() => ({}));
-                    throw new Error(errData.message || 'No se pudo actualizar el stock');
+                if (this.useBackend) {
+                    const res = await fetch('/api/productos', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(productoActualizado)
+                    });
+                    if (!res.ok) {
+                        const errData = await res.json().catch(() => ({}));
+                        throw new Error(errData.message || 'No se pudo actualizar el stock');
+                    }
+                } else {
+                    const idx = this.inventario.findIndex(i => i.id === productoActualizado.id);
+                    if (idx !== -1) {
+                        this.inventario[idx] = productoActualizado;
+                    }
+                    this.guardarRespaldoLocal();
                 }
 
-                await this.registrarBitacora('Salida de Stock', `Descontada 1 pz de ${productoActualizado.id}. Quedan: ${productoActualizado.stock_pz} pz`);
+                await this.registrarBitacora('Salida de Stock (1 Pz)', `Pieza ${productoActualizado.id}: Descontada 1 pz por ${this.usuario || 'Usuario'}. Quedan: ${nuevoStock} pz`);
                 this.mostrarDetallesEscaneo(productoActualizado);
-                this.mostrarToast('Stock actualizado (-1 pz)', 'success');
+                this.mostrarToast(`✅ Salida de 1 pz registrada (${productoActualizado.id}). Stock restante: ${nuevoStock} pz`, 'success');
                 await this.cargarDatos();
 
             } catch (e) {
-                this.mostrarToast(`❌ Error al actualizar en PostgreSQL: ${e.message}`, 'danger');
+                this.mostrarToast(`❌ Error al registrar salida: ${e.message}`, 'danger');
             }
         },
 
