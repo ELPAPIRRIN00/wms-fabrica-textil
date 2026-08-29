@@ -18,6 +18,8 @@
         html5QrcodeScanner: null,
         ultimoQrEscaneado: null,
         ultimoQrTiempo: 0,
+        etiquetasIngreso: [],
+        indiceEtiquetaIngreso: 0,
         inventario: [],
         bitacora: [],
         useBackend: true,
@@ -373,6 +375,15 @@
             document.getElementById('btn-descargar-qr-detalle')?.addEventListener('click', () => this.descargarQRDetalle());
             document.getElementById('btn-imprimir-qr-detalle')?.addEventListener('click', () => this.imprimirQRDetalle());
 
+            // Visor de etiquetas recién registradas
+            document.getElementById('btn-cerrar-etiquetas-ingreso')?.addEventListener('click', () => {
+                document.getElementById('modal-etiquetas-ingreso')?.classList.remove('active');
+            });
+            document.getElementById('btn-etiqueta-anterior')?.addEventListener('click', () => this.mostrarEtiquetaIngreso(-1));
+            document.getElementById('btn-etiqueta-siguiente')?.addEventListener('click', () => this.mostrarEtiquetaIngreso(1));
+            document.getElementById('btn-imprimir-etiqueta-actual')?.addEventListener('click', () => this.imprimirEtiquetasIngreso(false));
+            document.getElementById('btn-imprimir-todas-etiquetas')?.addEventListener('click', () => this.imprimirEtiquetasIngreso(true));
+
             // Control Escáner
             document.getElementById('btn-start-scanner')?.addEventListener('click', () => this.iniciarCamaraScanner());
             document.getElementById('btn-stop-scanner')?.addEventListener('click', () => this.detenerCamaraScanner());
@@ -719,6 +730,8 @@
                 this.mostrarToast('No se cargó la biblioteca de códigos QR.', 'danger');
                 return;
             }
+            this.etiquetasIngreso = productos;
+            this.indiceEtiquetaIngreso = 0;
             const primerProducto = productos[0];
             this.generarEtiquetaQR(primerProducto.id);
             const printArea = document.getElementById('print-area');
@@ -745,6 +758,61 @@
                     printArea.insertAdjacentHTML('beforeend', `<section class="print-label"><h2>H.A.M. POO WMS</h2><h3>${producto.nombre_producto}</h3><img src="${source}" alt="QR ${producto.id}"><p><strong>${producto.id}</strong></p><p>${producto.tipo}</p></section>`);
                 }
                 temp.remove();
+            });
+
+            this.mostrarEtiquetaIngreso(0);
+            document.getElementById('modal-etiquetas-ingreso')?.classList.add('active');
+        },
+
+        mostrarEtiquetaIngreso(desplazamiento) {
+            if (!this.etiquetasIngreso.length || typeof QRCode === 'undefined') return;
+            const total = this.etiquetasIngreso.length;
+            this.indiceEtiquetaIngreso = (this.indiceEtiquetaIngreso + desplazamiento + total) % total;
+            const producto = this.etiquetasIngreso[this.indiceEtiquetaIngreso];
+            const contenedor = document.getElementById('etiqueta-ingreso-qr');
+            if (!contenedor) return;
+
+            contenedor.innerHTML = '';
+            new QRCode(contenedor, {
+                text: producto.id,
+                width: 190,
+                height: 190,
+                colorDark: '#111827',
+                colorLight: '#ffffff',
+                correctLevel: QRCode.CorrectLevel.H
+            });
+            document.getElementById('etiquetas-ingreso-contador').textContent = `Etiqueta ${this.indiceEtiquetaIngreso + 1} de ${total}`;
+            document.getElementById('etiqueta-ingreso-id').textContent = producto.id;
+            document.getElementById('etiqueta-ingreso-meta').innerHTML = `
+                <span><strong>Producto:</strong> ${producto.nombre_producto}</span>
+                <span><strong>Tipo:</strong> ${producto.tipo}</span>
+                <span><strong>Pieza:</strong> 1 pz</span>
+            `;
+            const navegacion = document.getElementById('etiquetas-ingreso-navegacion');
+            if (navegacion) navegacion.hidden = total === 1;
+        },
+
+        imprimirEtiquetasIngreso(todas) {
+            const etiquetas = todas ? this.etiquetasIngreso : [this.etiquetasIngreso[this.indiceEtiquetaIngreso]];
+            if (!etiquetas[0]) return;
+            this.prepararAreaImpresion(etiquetas);
+            window.print();
+        },
+
+        prepararAreaImpresion(productos) {
+            const printArea = document.getElementById('print-area');
+            if (!printArea) return;
+            printArea.innerHTML = '';
+            productos.forEach(producto => {
+                const temporal = document.createElement('div');
+                temporal.style.cssText = 'position:fixed;left:-10000px;top:0;';
+                document.body.appendChild(temporal);
+                new QRCode(temporal, { text: producto.id, width: 220, height: 220, colorDark: '#111827', colorLight: '#ffffff', correctLevel: QRCode.CorrectLevel.H });
+                const fuente = temporal.querySelector('img')?.src || temporal.querySelector('canvas')?.toDataURL('image/png');
+                if (fuente) {
+                    printArea.insertAdjacentHTML('beforeend', `<section class="print-label"><h2>H.A.M. POO WMS</h2><h3>${producto.nombre_producto}</h3><img src="${fuente}" alt="QR ${producto.id}"><p><strong>${producto.id}</strong></p><p>${producto.tipo}</p></section>`);
+                }
+                temporal.remove();
             });
         },
 

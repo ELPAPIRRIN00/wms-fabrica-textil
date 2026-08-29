@@ -503,6 +503,33 @@
         </div>
     </div>
 
+    <!-- Modal de etiquetas recién registradas -->
+    <div id="modal-etiquetas-ingreso" class="modal-overlay">
+        <div class="modal-box qr-detail-box">
+            <div class="modal-heading">
+                <div>
+                    <span class="badge badge-success">Ingreso registrado</span>
+                    <h3>Etiquetas QR listas</h3>
+                </div>
+                <button type="button" class="btn-icon" id="btn-cerrar-etiquetas-ingreso" aria-label="Cerrar etiquetas">
+                    <i class="ph ph-x"></i>
+                </button>
+            </div>
+            <p id="etiquetas-ingreso-contador" class="field-help"></p>
+            <div id="etiqueta-ingreso-qr" class="qr-box qr-detail-code"></div>
+            <p id="etiqueta-ingreso-id" class="qr-detail-id"></p>
+            <div id="etiqueta-ingreso-meta" class="qr-detail-meta"></div>
+            <div class="label-navigation" id="etiquetas-ingreso-navegacion">
+                <button type="button" class="btn btn-outline" id="btn-etiqueta-anterior"><i class="ph ph-caret-left"></i> Anterior</button>
+                <button type="button" class="btn btn-outline" id="btn-etiqueta-siguiente">Siguiente <i class="ph ph-caret-right"></i></button>
+            </div>
+            <div class="modal-actions">
+                <button type="button" class="btn btn-outline" id="btn-imprimir-etiqueta-actual"><i class="ph ph-printer"></i> Imprimir esta</button>
+                <button type="button" class="btn btn-primary" id="btn-imprimir-todas-etiquetas"><i class="ph ph-printer"></i> Imprimir todas</button>
+            </div>
+        </div>
+    </div>
+
     <!-- Toast Notifications -->
     <div id="toast-container" class="toast-container"></div>
 

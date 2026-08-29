@@ -685,6 +685,8 @@ p { color: var(--text-secondary); line-height: 1.5; }
 .qr-detail-box { text-align: center; }
 .modal-heading { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 24px; text-align: left;}
 .qr-detail-meta { display: flex; flex-direction: column; gap: 8px; margin-bottom: 24px; text-align: left; background: var(--bg-body); padding: 16px; border-radius: var(--radius-sm);}
+.label-navigation { display: flex; justify-content: center; gap: 12px; margin: 16px 0; }
+#print-area { display: none; }
 
 /* Toasts */
 .toast-container { 
@@ -727,6 +729,7 @@ p { color: var(--text-secondary); line-height: 1.5; }
     .sidebar, .topbar, .mobile-topbar, .toast-container, .modal-overlay, .table-filters { display: none !important; }
     .main-content { padding: 0; overflow: visible; }
     #print-area, #print-area * { visibility: visible; }
+    #print-area { display: block; }
     #print-area { position: absolute; left: 0; top: 0; width: 100%; }
     .print-label { text-align: center; font-family: sans-serif; padding: 20px; border: 1px solid #000; width: 300px; margin: 0 auto; page-break-after: always;}
     .print-label img { margin: 10px 0; max-width: 100%; height: auto;}
@@ -791,6 +794,8 @@ p { color: var(--text-secondary); line-height: 1.5; }
     .modal-actions .btn { width: 100%; min-height: 44px; }
     .input-with-btn { flex-wrap: wrap; }
     .input-with-btn .btn { width: 100%; min-height: 44px; }
+    .label-navigation { flex-direction: column; }
+    .label-navigation .btn { width: 100%; }
     .inventory-group-header {
         flex-direction: column;
         align-items: flex-start;
