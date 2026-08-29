@@ -9,7 +9,16 @@ const PORT = process.env.PORT || 3000;
 // Configuración de Express
 app.use(cors());
 app.use(express.json({ limit: '10mb' }));
-app.use(express.static(path.join(__dirname, 'public')));
+// La interfaz cambia con frecuencia: el HTML siempre se revalida para que
+// teléfonos no conserven una versión vieja del JavaScript o CSS.
+app.use(express.static(path.join(__dirname, 'public'), {
+    maxAge: '1h',
+    setHeaders(res, filePath) {
+        if (filePath.endsWith('.html')) {
+            res.setHeader('Cache-Control', 'no-cache, max-age=0, must-revalidate');
+        }
+    }
+}));
 
 // Datos iniciales de respaldo (Fallback local si no hay DB activa)
 let fallbackInventario = [
