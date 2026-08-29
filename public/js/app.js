@@ -229,10 +229,11 @@
             document.getElementById('app-shell').classList.remove('hidden');
             document.getElementById('user-display-name').textContent = this.usuario;
             document.getElementById('user-display-role').textContent = this.rol;
-            const dashboardButton = document.querySelector('[data-target="dashboard"]');
-            const exportButton = document.getElementById('btn-export-csv');
             const operador = this.rol === 'Operador';
-            if (dashboardButton) dashboardButton.hidden = operador;
+            document.querySelectorAll('[data-admin-only]').forEach(elemento => {
+                elemento.hidden = operador;
+            });
+            const exportButton = document.getElementById('btn-export-csv');
             if (exportButton) exportButton.hidden = operador;
 
             if (operador && this.vistaActual === 'dashboard') {
@@ -553,7 +554,7 @@
                     <td><strong>${item.id}</strong></td>
                     <td>${item.nombre_producto || item.tela}</td>
                     <td>${item.medidas || 'N/A'}</td>
-                    <td><span class="badge badge-info">${item.stock_pz || item.metros || 0} pz</span></td>
+                    <td><span class="badge badge-info">${item.estado === 'Salida' ? 'Salida' : '1 pz'}</span></td>
                     <td>${item.color}</td>
                     <td>${item.composicion}</td>
                     <td><span class="badge badge-type">${item.tipo || item.presentacion}</span></td>
@@ -579,7 +580,7 @@
                                 <button type="button" class="inventory-group-toggle" data-group="${nombre}" aria-expanded="${abierto}">
                                     <i class="ph ph-caret-${abierto ? 'down' : 'right'}"></i>
                                     <strong>${nombre}</strong>
-                                    <span class="group-summary">${items.length} pieza(s) | Stock total: ${totalStock} pz</span>
+                                    <span class="group-summary">${items.length} pieza(s) | Disponibles: ${totalStock} pz</span>
                                 </button>
                                 ${accionesFamiliaAdmin}
                             </div>
@@ -623,16 +624,19 @@
 
         /* ---------- REGISTRO DE PRODUCTOS EN POSTGRESQL ---------- */
         async registrarProducto() {
+            if (this.rol !== 'Administrador' && this.rol !== 'Operador') {
+                this.mostrarToast('Solo administrador u operador pueden registrar entradas.', 'warning');
+                return;
+            }
             const id = document.getElementById('reg-id').value.trim();
             const nombre = document.getElementById('reg-nombre').value.trim();
             const medidas = document.getElementById('reg-medidas').value.trim();
-            const stock = parseInt(document.getElementById('reg-stock').value, 10);
             const cantidad = parseInt(document.getElementById('reg-cantidad').value, 10);
             const color = document.getElementById('reg-color').value.trim();
             const composicion = document.getElementById('reg-composicion').value.trim();
             const tipo = document.getElementById('reg-tipo').value;
 
-            if (!id || !nombre || !medidas || isNaN(stock) || stock < 1 || isNaN(cantidad) || cantidad < 1 || cantidad > 1000 || !color || !composicion) {
+            if (!id || !nombre || !medidas || isNaN(cantidad) || cantidad < 1 || cantidad > 1000 || !color || !composicion) {
                 this.mostrarToast('Por favor completa todos los campos requeridos', 'warning');
                 return;
             }
@@ -641,7 +645,8 @@
                 id: cantidad === 1 ? id : `${id}-${String(indice + 1).padStart(3, '0')}`,
                 nombre_producto: nombre,
                 medidas,
-                stock_pz: stock,
+                // Regla de trazabilidad: un QR identifica exactamente una pieza.
+                stock_pz: 1,
                 color,
                 composicion,
                 tipo,
@@ -667,7 +672,7 @@
                     }
                 }
 
-                await this.registrarBitacora('Ingreso de Producto', `Registradas ${cantidad} pieza(s) de ${nombre} (${stock} pz c/u) - Tipo ${tipo}`);
+                await this.registrarBitacora('Ingreso de Producto', `Registradas ${cantidad} pieza(s) de ${nombre}; un código QR único por pieza. Tipo ${tipo}`);
                 this.generarEtiquetasQR(productos);
                 this.mostrarToast(`${cantidad} producto(s) guardado(s) en PostgreSQL correctamente`, 'success');
 
@@ -675,7 +680,6 @@
                 document.getElementById('reg-id').value = '';
                 document.getElementById('reg-nombre').value = '';
                 document.getElementById('reg-medidas').value = '';
-                document.getElementById('reg-stock').value = '';
                 document.getElementById('reg-color').value = '';
                 document.getElementById('reg-composicion').value = '';
 
@@ -939,7 +943,7 @@
             document.getElementById('scan-title').textContent = producto.id;
             document.getElementById('scan-nombre').textContent = producto.nombre_producto || producto.tela || 'N/A';
             document.getElementById('scan-medidas').textContent = producto.medidas || 'N/A';
-            document.getElementById('scan-stock').textContent = `${stockVal} pz`;
+            document.getElementById('scan-stock').textContent = producto.estado === 'Salida' ? 'Salida registrada' : '1 pz (QR único)';
             document.getElementById('scan-color').textContent = producto.color || 'N/A';
             document.getElementById('scan-composicion').textContent = producto.composicion || 'N/A';
             document.getElementById('scan-tipo').textContent = producto.tipo || producto.presentacion || 'N/A';
@@ -1078,8 +1082,8 @@
                     throw new Error(errData.message || 'No se pudo eliminar');
                 }
 
-                await this.registrarBitacora('Baja por merma/defecto', `${id}: ${motivo.trim()}`);
-                this.mostrarToast(`Producto ${id} dado de baja correctamente`, 'success');
+                await this.registrarBitacora('Eliminación de pieza y QR', `${id}: ${motivo.trim()}`);
+                this.mostrarToast(`Pieza ${id} y su QR eliminados correctamente`, 'success');
 
                 await this.cargarDatos();
 
@@ -1124,7 +1128,7 @@
                 }
 
                 document.getElementById('modal-confirm-delete-type').classList.remove('active');
-                this.mostrarToast(`Familia ${nombre} dada de baja correctamente`, 'success');
+                this.mostrarToast(`Familia ${nombre} y sus QR fueron eliminados`, 'success');
                 await this.cargarDatos();
 
             } catch (err) {
@@ -1144,7 +1148,6 @@
             document.getElementById('edit-id').value = item.id;
             document.getElementById('edit-nombre').value = item.nombre_producto || item.tela;
             document.getElementById('edit-medidas').value = item.medidas || '';
-            document.getElementById('edit-stock').value = item.stock_pz || item.metros || 0;
             document.getElementById('edit-color').value = item.color;
             document.getElementById('edit-composicion').value = item.composicion;
             document.getElementById('edit-tipo').value = item.tipo || 'ROLLO';
@@ -1166,13 +1169,14 @@
                 ...itemOriginal,
                 nombre_producto: document.getElementById('edit-nombre').value.trim(),
                 medidas: document.getElementById('edit-medidas').value.trim(),
-                stock_pz: parseInt(document.getElementById('edit-stock').value, 10),
+                // Una edición administrativa conserva la relación 1 QR = 1 pieza.
+                stock_pz: itemOriginal.estado === 'Salida' ? 0 : 1,
                 color: document.getElementById('edit-color').value.trim(),
                 composicion: document.getElementById('edit-composicion').value.trim(),
                 tipo: document.getElementById('edit-tipo').value
             };
 
-            if (!editado.nombre_producto || !editado.medidas || !editado.color || !editado.composicion || Number.isNaN(editado.stock_pz) || editado.stock_pz < 0) {
+            if (!editado.nombre_producto || !editado.medidas || !editado.color || !editado.composicion) {
                 this.mostrarToast('Completa correctamente todos los campos.', 'warning');
                 return;
             }

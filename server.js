@@ -13,9 +13,9 @@ app.use(express.static(path.join(__dirname, 'public')));
 
 // Datos iniciales de respaldo (Fallback local si no hay DB activa)
 let fallbackInventario = [
-    { id: 'HAM-1001', nombre_producto: 'Toalla Facial Hilaza', medidas: '40x70', stock_pz: 120, color: 'Blanco Óptico', composicion: '100% Algodón', tipo: 'ROLLO', bodega: 1, fecha: new Date().toLocaleString('es-MX'), estado: 'Activo' },
-    { id: 'HAM-1002', nombre_producto: 'Sabana Algodón Peinado', medidas: '160x200', stock_pz: 80, color: 'Negro Intenso', composicion: '100% Algodón Peinado', tipo: 'PAQUETE', bodega: 1, fecha: new Date().toLocaleString('es-MX'), estado: 'Activo' },
-    { id: 'HAM-1003', nombre_producto: 'Tela Poliéster Deportivo', medidas: '150x300', stock_pz: 200, color: 'Azul Marino', composicion: '100% Poliéster', tipo: 'BULTO', bodega: 2, fecha: new Date().toLocaleString('es-MX'), estado: 'Activo' }
+    { id: 'HAM-1001', nombre_producto: 'Toalla Facial Hilaza', medidas: '40x70', stock_pz: 1, color: 'Blanco Óptico', composicion: '100% Algodón', tipo: 'ROLLO', bodega: 1, fecha: new Date().toLocaleString('es-MX'), estado: 'Activo' },
+    { id: 'HAM-1002', nombre_producto: 'Sabana Algodón Peinado', medidas: '160x200', stock_pz: 1, color: 'Negro Intenso', composicion: '100% Algodón Peinado', tipo: 'PAQUETE', bodega: 1, fecha: new Date().toLocaleString('es-MX'), estado: 'Activo' },
+    { id: 'HAM-1003', nombre_producto: 'Tela Poliéster Deportivo', medidas: '150x300', stock_pz: 1, color: 'Azul Marino', composicion: '100% Poliéster', tipo: 'BULTO', bodega: 2, fecha: new Date().toLocaleString('es-MX'), estado: 'Activo' }
 ];
 
 let fallbackBitacora = [
@@ -160,7 +160,7 @@ app.get('/api/productos/:id', async (req, res) => {
     }
 });
 
-// 3. Crear o actualizar un producto individual
+// 3. Crear o actualizar una pieza individual. Un ID/QR siempre equivale a una pieza.
 app.post('/api/productos', async (req, res) => {
     try {
         const { id, nombre_producto, medidas, stock_pz, color, composicion, tipo, bodega, fecha, estado } = req.body;
@@ -172,13 +172,14 @@ app.post('/api/productos', async (req, res) => {
         const cleanId = String(id).trim();
         const cleanNombre = String(nombre_producto).trim();
         const cleanMedidas = String(medidas || 'N/A').trim();
-        const numStock = parseInt(stock_pz, 10) || 0;
+        const estReg = estado || 'Activo';
+        // No se permiten cantidades por QR: activo = 1 pieza, salida = 0 piezas.
+        const numStock = estReg === 'Salida' ? 0 : 1;
         const cleanColor = String(color || '').trim();
         const cleanComposicion = String(composicion || '').trim();
         const cleanTipo = String(tipo || 'ROLLO').toUpperCase().trim();
         const numBodega = parseInt(bodega, 10) || 1;
         const fechaReg = fecha || new Date().toLocaleString('es-MX');
-        const estReg = estado || 'Activo';
 
         if (pool) {
             await pool.query(`
@@ -230,7 +231,7 @@ app.post('/api/productos', async (req, res) => {
     }
 });
 
-// 4. Eliminar producto por ID (Soft delete / Merma)
+// 4. Eliminar una pieza y su QR. La evidencia permanece en la bitácora del cliente.
 app.delete('/api/productos/:id', async (req, res) => {
     try {
         const { id } = req.params;
@@ -241,23 +242,23 @@ app.delete('/api/productos/:id', async (req, res) => {
         }
 
         if (pool) {
-            const result = await pool.query("UPDATE inventario SET estado = 'Merma/Defecto' WHERE id = $1 RETURNING *", [cleanId]);
+            const result = await pool.query('DELETE FROM inventario WHERE id = $1 RETURNING *', [cleanId]);
             if (result.rowCount === 0) {
                 return res.status(404).json({ status: 'error', message: 'El producto no existe en la base de datos.' });
             }
         } else {
             const producto = fallbackInventario.find(item => item.id === cleanId);
             if (!producto) return res.status(404).json({ status: 'error', message: 'El producto no fue encontrado.' });
-            producto.estado = 'Merma/Defecto';
+            fallbackInventario = fallbackInventario.filter(item => item.id !== cleanId);
         }
 
-        res.json({ status: 'ok', message: `Producto ${cleanId} dado de baja correctamente.` });
+        res.json({ status: 'ok', message: `Pieza ${cleanId} y su código QR fueron eliminados correctamente.` });
     } catch (err) {
         handleError(err, res);
     }
 });
 
-// 4b. Eliminar productos por familia/tipo (Soft delete masivo)
+// 4b. Eliminar productos por familia/tipo, incluidos sus QR individuales.
 app.delete('/api/productos/tipo/:nombre', async (req, res) => {
     try {
         const { nombre } = req.params;
@@ -270,7 +271,7 @@ app.delete('/api/productos/tipo/:nombre', async (req, res) => {
 
         if (pool) {
             const result = await pool.query(
-                "UPDATE inventario SET estado = 'Merma/Defecto' WHERE (nombre_producto = $1 OR tela = $1) AND estado != 'Merma/Defecto' RETURNING *",
+                'DELETE FROM inventario WHERE nombre_producto = $1 OR tela = $1 RETURNING *',
                 [cleanNombre]
             );
             if (result.rowCount === 0) {
@@ -278,27 +279,24 @@ app.delete('/api/productos/tipo/:nombre', async (req, res) => {
             }
         } else {
             let actualizados = 0;
-            fallbackInventario.forEach(item => {
-                if ((item.nombre_producto === cleanNombre || item.tela === cleanNombre) && item.estado !== 'Merma/Defecto') {
-                    item.estado = 'Merma/Defecto';
-                    actualizados++;
-                }
-            });
+            const originales = fallbackInventario.length;
+            fallbackInventario = fallbackInventario.filter(item => item.nombre_producto !== cleanNombre && item.tela !== cleanNombre);
+            actualizados = originales - fallbackInventario.length;
             if (actualizados === 0) {
                  return res.status(404).json({ status: 'error', message: 'No se encontraron productos activos de esta familia.' });
             }
         }
 
-        const detalleBitacora = `Baja masiva de familia "${cleanNombre}": ${motivo}`;
+        const detalleBitacora = `Eliminación de familia y sus QR: "${cleanNombre}". Motivo: ${motivo}`;
         const fechaReg = new Date().toLocaleString('es-MX');
         
         if (pool) {
              await pool.query(
                 'INSERT INTO bitacora (fecha, usuario, accion, bodega, detalle) VALUES ($1, $2, $3, $4, $5)',
-                [fechaReg, usuario, 'Baja por merma/defecto', 'General', detalleBitacora]
+                [fechaReg, usuario, 'Eliminación de piezas y QR', 'General', detalleBitacora]
             );
         } else {
-             fallbackBitacora.unshift({ id: Date.now(), fecha: fechaReg, usuario: usuario, accion: 'Baja por merma/defecto', bodega: 'General', detalle: detalleBitacora });
+             fallbackBitacora.unshift({ id: Date.now(), fecha: fechaReg, usuario: usuario, accion: 'Eliminación de piezas y QR', bodega: 'General', detalle: detalleBitacora });
         }
 
         res.json({ status: 'ok', message: `Familia de productos '${cleanNombre}' dada de baja correctamente.` });
@@ -369,7 +367,7 @@ app.post('/api/sincronizar', async (req, res) => {
                 const cleanId = String(item.id).trim();
                 const cleanNombre = String(item.nombre_producto || item.tela || '').trim();
                 const cleanMedidas = String(item.medidas || 'N/A').trim();
-                const numStock = parseInt(item.stock_pz || item.metros || 0, 10) || 0;
+                const numStock = item.estado === 'Salida' ? 0 : 1;
                 const cleanColor = String(item.color || '').trim();
                 const cleanComposicion = String(item.composicion || '').trim();
                 const cleanTipo = String(item.tipo || item.presentacion || 'ROLLO').toUpperCase().trim();

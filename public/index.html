@@ -74,10 +74,10 @@
             </div>
 
             <nav class="sidebar-nav">
-                <button class="nav-btn active" data-target="dashboard">
+                <button class="nav-btn active" data-target="dashboard" data-admin-only>
                     <i class="ph ph-squares-four"></i> <span>Dashboard</span>
                 </button>
-                <button class="nav-btn" data-target="inventario">
+                <button class="nav-btn" data-target="inventario" data-admin-only>
                     <i class="ph ph-package"></i> <span>Inventario</span>
                 </button>
                 <button class="nav-btn" data-target="registro">
@@ -86,7 +86,7 @@
                 <button class="nav-btn" data-target="escaner">
                     <i class="ph ph-qr-code"></i> <span>Escáner QR</span>
                 </button>
-                <button class="nav-btn" data-target="bitacora">
+                <button class="nav-btn" data-target="bitacora" data-admin-only>
                     <i class="ph ph-receipt"></i> <span>Bitácora</span>
                 </button>
             </nav>
@@ -208,7 +208,7 @@
                                 <th>ID (QR)</th>
                                 <th>Nombre Producto</th>
                                 <th>Medidas</th>
-                                <th>Stock (Pz)</th>
+                                <th>Pieza</th>
                                 <th>Color</th>
                                 <th>Composición</th>
                                 <th>Tipo</th>
@@ -260,15 +260,10 @@
                             <input type="text" id="reg-medidas" placeholder="Ej. 70 x 140" required>
                         </div>
 
-                        <!-- 4. Stock de ese tipo de tela (pz) -->
                         <div class="input-group">
-                            <label for="reg-stock"><i class="ph ph-number-square-one"></i> 4. Stock de Piezas (Pz)</label>
-                            <input type="number" id="reg-stock" placeholder="Ej. 100" min="1" required>
-                        </div>
-
-                        <div class="input-group">
-                            <label for="reg-cantidad"><i class="ph ph-stack"></i> Cantidad de piezas a registrar</label>
+                            <label for="reg-cantidad"><i class="ph ph-stack"></i> 4. Cantidad de piezas a registrar</label>
                             <input type="number" id="reg-cantidad" value="1" min="1" max="1000" required>
+                            <small class="field-help">Cada pieza recibirá su propio código QR y se registra como 1 pieza.</small>
                         </div>
 
                         <!-- 5. Colores -->
@@ -358,7 +353,7 @@
                             <div class="detail-grid">
                                 <div><strong>Nombre Producto:</strong> <span id="scan-nombre">-</span></div>
                                 <div><strong>Medidas:</strong> <span id="scan-medidas">-</span></div>
-                                <div><strong>Stock (Pz):</strong> <span id="scan-stock">-</span></div>
+                                <div><strong>Pieza:</strong> <span id="scan-stock">-</span></div>
                                 <div><strong>Color:</strong> <span id="scan-color">-</span></div>
                                 <div><strong>Composición:</strong> <span id="scan-composicion">-</span></div>
                                 <div><strong>Tipo Empaque:</strong> <span id="scan-tipo">-</span></div>
@@ -418,10 +413,7 @@
                     <label for="edit-medidas">Medidas</label>
                     <input type="text" id="edit-medidas" required>
                 </div>
-                <div class="input-group">
-                    <label for="edit-stock">Stock (Pz)</label>
-                    <input type="number" id="edit-stock" min="0" required>
-                </div>
+                <p class="field-help">Este registro representa una sola pieza y su QR no se puede reasignar.</p>
                 <div class="input-group">
                     <label for="edit-color">Color</label>
                     <input type="text" id="edit-color" required>
